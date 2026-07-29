@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ player.name }} — Week {{ week }} breakdown</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <h1>{{ player.name }} <span class="meta">{{ player.position }} · {{ player.team }} · Week {{ week }}</span></h1>
+        <a href="/?week={{ week }}">&larr; Back to dashboard</a>
+    </header>
+
+    <section class="summary-box">
+        <div><span class="summary-label">DFS Projection</span><span class="summary-value">{{ dfs_pts if dfs_pts is not none else "—" }}</span></div>
+        <div><span class="summary-label">Betting-Derived</span><span class="summary-value">{{ betting_pts if betting_pts is not none else "—" }}</span></div>
+        <div><span class="summary-label">Blended</span><span class="summary-value blended">{{ blended if blended is not none else "—" }}</span></div>
+        {% if rec %}
+        <div class="call-{{ rec.call|lower|replace('-', '') }}"><span class="summary-label">Call</span><span class="summary-value"><span class="badge">{{ rec.call }}</span></span></div>
+        {% endif %}
+    </section>
+    {% if rec %}<p class="note">{{ rec.note }}</p>{% endif %}
+
+    <h2>DFS Projections</h2>
+    {% if dfs_rows %}
+    <table>
+        <thead><tr><th>Source</th><th>Projected Points</th></tr></thead>
+        <tbody>
+            {% for row in dfs_rows %}
+            <tr><td>{{ dfs_source_labels.get(row.source, row.source) }}</td><td>{{ row.projected_points }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <p class="note">Average of the sources above = {{ dfs_pts }}, feeding into the blend as the "DFS Projection" number.</p>
+    {% else %}
+    <p class="note">No DFS projections stored for this player/week.</p>
+    {% endif %}
+
+    {% macro fmt_odds(o) -%}
+        {%- if o is none -%}—{%- else -%}{{ "+" if o > 0 else "" }}{{ o }}{%- endif -%}
+    {%- endmacro %}
+
+    <h2>Sportsbook Markets</h2>
+    {% if markets %}
+        {% for m in markets %}
+        <div class="market-block">
+            <h3>{{ m.label }}
+                <span class="market-summary">
+                    {% if m.method == "discrete" %}exact expected count{% elif m.method == "trapezoidal" %}market-curve estimate{% elif m.method == "legacy_probability" %}older data — averaged raw probability, no threshold detail stored{% else %}price-adjusted average (not enough threshold data for a curve){% endif %}
+                    {{ m.average }} &times; {{ m.rate }} pts = <strong>{{ m.points }} pts</strong>
+                </span>
+            </h3>
+
+            {% if m.thresholds %}
+            <table class="books-table">
+                <thead><tr><th>Threshold</th><th>P(actual &gt; threshold)</th><th>Books quoting it</th></tr></thead>
+                <tbody>
+                    {% for t in m.thresholds %}
+                    <tr>
+                        <td>{{ t.threshold }}</td>
+                        <td>{{ (t.probability * 100)|round(1) }}%</td>
+                        <td>{% if t.assumed %}<span class="note">assumed, not a real book</span>{% else %}{{ t.book_count }}{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <p class="note">
+                {% if m.method == "discrete" %}Sum of every threshold's probability above = the exact expected count for this stat — no distribution assumed, just adding market-implied probabilities.
+                {% else %}Trapezoidal estimate connecting these threshold probabilities, from an assumed P(actual &gt; 0) = 100% up through the highest threshold quoted; anything beyond the highest threshold is not counted (a small, one-directional underestimate).{% endif %}
+            </p>
+            {% endif %}
+
+            {% if m.books %}
+            <table class="books-table">
+                <thead>
+                    <tr>
+                        <th>Sportsbook</th>
+                        <th>Line</th>
+                        <th>Over Odds</th>
+                        <th>Under Odds</th>
+                        <th>Price-Adjusted Estimate</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for book in m.books %}
+                    <tr>
+                        <td>{{ book.bookmaker or "unknown" }}</td>
+                        <td>{{ book.line }}</td>
+                        <td>{{ fmt_odds(book.odds) }}</td>
+                        <td>{{ fmt_odds(book.under_odds) }}</td>
+                        <td>{{ book.effective_line }}{% if book.under_odds is none %} <span class="note">(no Under price — using raw line)</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+    <p class="note">No sportsbook props stored for this player/week.</p>
+    {% endif %}
+</body>
+</html>
