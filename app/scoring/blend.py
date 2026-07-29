@@ -6,12 +6,13 @@ from statistics import NormalDist
 from typing import Optional
 
 from app.models import OddsProp, DfsProjection
-from app.scoring.config import ScoringRules, REPLACEMENT_LEVEL
+from app.scoring.config import ScoringRules
 from app.data_sources.odds_api import american_odds_to_implied_probability
 
 # Roughly how many players at a position are considered "startable" by
 # consensus — used to translate an expert position-rank into a plain-language
-# tier. Starting point only, same caveat as REPLACEMENT_LEVEL.
+# tier. Rough industry rule-of-thumb, not calibrated to any specific league
+# format — same caveat as LINE_MARKET_CV below.
 EXPERT_STARTER_RANK_CUTOFF = {"QB": 12, "RB": 24, "WR": 30, "TE": 12}
 EXPERT_FLEX_RANK_CUTOFF = {"QB": 18, "RB": 36, "WR": 42, "TE": 18}
 
@@ -60,8 +61,7 @@ NO_FALLBACK_STATS = {"rush_rec_tds"}
 # empirically calibrated coefficients of variation (std-dev as a fraction
 # of the line) used only for that fallback nudge — see
 # _price_adjusted_line(). Industry rule-of-thumb magnitudes, not fitted to
-# this project's own historical results — same "starting point, expect to
-# refine" caveat as REPLACEMENT_LEVEL.
+# this project's own historical results — a starting point to refine later.
 MIN_THRESHOLDS_FOR_CURVE = 3
 LINE_MARKET_CV = {
     "pass_yds": 0.30,
@@ -281,41 +281,3 @@ def expert_perspective(position: str, position_rank: Optional[int]) -> Optional[
     return ExpertPerspective("Bench", considers_startable=False)
 
 
-@dataclass
-class Recommendation:
-    call: str  # "Start", "Sit", "Toss-up"
-    note: str
-
-
-def start_sit_recommendation(
-    blended_points: Optional[float],
-    position: str,
-    expert: Optional[ExpertPerspective],
-) -> Recommendation:
-    """Section 5, step 4-5: compare blended points to a replacement-level
-    threshold for a base call, then layer the expert lens on top — surfacing
-    disagreement instead of silently overriding either signal."""
-    if blended_points is None:
-        return Recommendation("Unknown", "No data yet — add odds/projections for this player.")
-
-    threshold = REPLACEMENT_LEVEL.get(position, 10.0)
-    margin = blended_points - threshold
-
-    if margin > 1.5:
-        quant_call = "Start"
-    elif margin < -1.5:
-        quant_call = "Sit"
-    else:
-        quant_call = "Toss-up"
-
-    if expert is None:
-        return Recommendation(quant_call, "No expert rank available yet.")
-
-    quant_says_start = quant_call in ("Start", "Toss-up")
-    if quant_says_start == expert.considers_startable:
-        return Recommendation(quant_call, f"Confirmed by experts ({expert.label}).")
-
-    return Recommendation(
-        quant_call,
-        f"Conflict: quant says {quant_call}, expert consensus has him as {expert.label} — worth a second look.",
-    )

@@ -27,7 +27,7 @@ The core idea: betting markets and DFS projection services are each independentl
   - Relevant sportsbook lines (rushing/receiving/passing yard props, anytime TD odds, game total/spread as context)
   - A blended **expected fantasy points** number (methodology below)
   - An **expert perspective** indicator (e.g., "Top 12 at position," "Flex-worthy," "Bench" — derived from expert rankings, shown alongside but separate from the quant number)
-  - A simple **Start / Sit / Toss-up** recommendation, which factors in both the quant number and whether the expert lens agrees or disagrees with it
+  - ~~A simple **Start / Sit / Toss-up** recommendation~~ — **removed 2026-07-29.** The recommendation compared the blended number to a flat, hardcoded per-position threshold that had no way to account for league format (team count, roster spots, PPR/superflex/etc.) — a 12-team-league "Start" could easily be a 10-team-league lock or a 14-team-league bench piece, and the tool had no way to know which. Rather than show a confident-looking badge built on an assumption that's wrong for most leagues, v1 now just shows the raw numbers (DFS projection, betting-derived estimate, blended) and lets the user apply their own league's context. See Section 5 below for the real fix path (compare against the user's actual Sleeper league roster instead of a flat threshold) — deferred, not abandoned.
 - Data refreshes automatically on a schedule (not manual re-entry) — see Section 4 on feasibility per source
 - Basic table/dashboard view, sortable by position and expected points
 
@@ -82,13 +82,10 @@ Rough v1 approach, in plain terms:
    - Anytime-TD odds → convert American/decimal odds to implied probability (removing vig where possible) → multiply by 6 (or 4 for passing TDs) for expected TD points
    - Game total/spread → used as context (game script, blowout risk) rather than a direct point input at first
 3. **Blend:** start with a simple average or weighted average of the DFS-projection number and the betting-derived number. Weighting can be tuned later based on which source proves more accurate. **Expert rankings are intentionally excluded from this blend** — they stay qualitative and are not converted into points.
-4. **Start/Sit call:** compare the blended number to a positional replacement-level threshold (e.g., typical points needed to be a weekly starter at that position). If the user's actual roster/bench is available, compare directly against their alternatives instead.
-5. **Apply the expert-perspective lens on top of the quant call:**
-   - If the expert rank/tier **agrees** with the quant-based call → show the recommendation with higher confidence (e.g., "Start ✓ — confirmed by experts")
-   - If they **disagree** → don't silently override the number; surface the conflict to the user (e.g., "Quant says Start, expert consensus has him as a bench piece — worth a second look") so they can weigh it themselves
-   - This keeps the two signals separate and visible rather than merging them into one opaque score
+4. ~~**Start/Sit call:** compare the blended number to a positional replacement-level threshold...~~ **Removed 2026-07-29** — a flat per-position threshold (e.g. "18 pts = startable QB") can't account for league depth/format, and showing a confident-looking Start/Sit/Toss-up badge built on a wrong assumption is worse than showing none. v1 now stops at the blended number and lets the user decide. **Real fix, deferred not abandoned:** compare the blended number directly against the alternatives on the user's actual bench, pulled from their real Sleeper league (Sleeper already supports fetching a specific league's rosters/settings for free, given a league ID) — this was always the "right" version per the original plan, just not built yet.
+5. ~~**Apply the expert-perspective lens on top of the quant call**~~ — the expert-agreement/conflict messaging was part of the removed Start/Sit call and went with it. The underlying expert-perspective indicator itself (Top 12/Flex-worthy/Bench label, Section 3) is unaffected and still shown separately once FantasyPros is configured.
 
-This should be treated as a first draft — refining the blend, the expert-agreement logic, and the start/sit thresholds using real results is an explicit part of the roadmap, not a one-time decision.
+This should be treated as a first draft — refining the blend using real results, and eventually rebuilding the start/sit call against real league rosters, is an explicit part of the roadmap, not a one-time decision.
 
 ## 6. Technical Architecture (recommendation, not final)
 

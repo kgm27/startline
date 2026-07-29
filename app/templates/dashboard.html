@@ -30,17 +30,21 @@
             <div class="stat-value">{{ summary.total }}</div>
             <div class="stat-label">Players Tracked</div>
         </div>
-        <div class="stat-card accent-start">
-            <div class="stat-value">{{ summary.start }}</div>
-            <div class="stat-label">Start Calls</div>
+        <div class="stat-card">
+            <div class="stat-value">{{ summary.qb }}</div>
+            <div class="stat-label">QB</div>
         </div>
-        <div class="stat-card accent-tossup">
-            <div class="stat-value">{{ summary.tossup }}</div>
-            <div class="stat-label">Toss-Ups</div>
+        <div class="stat-card">
+            <div class="stat-value">{{ summary.rb }}</div>
+            <div class="stat-label">RB</div>
         </div>
-        <div class="stat-card accent-sit">
-            <div class="stat-value">{{ summary.sit }}</div>
-            <div class="stat-label">Sit Calls</div>
+        <div class="stat-card">
+            <div class="stat-value">{{ summary.wr }}</div>
+            <div class="stat-label">WR</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ summary.te }}</div>
+            <div class="stat-label">TE</div>
         </div>
     </div>
 
@@ -68,12 +72,11 @@
                     <th class="sortable" :class="{sorted: sortKey === 'betting_pts'}" @click="sortBy('betting_pts')">Betting Est. <span class="sort-arrow" x-text="arrow('betting_pts')"></span></th>
                     <th class="sortable" :class="{sorted: sortKey === 'blended'}" @click="sortBy('blended')">Blended <span class="sort-arrow" x-text="arrow('blended')"></span></th>
                     <th>Expert</th>
-                    <th>Call</th>
                 </tr>
             </thead>
             <tbody>
                 <template x-for="row in filteredRows" :key="row.id">
-                    <tr :class="'call-' + row.call.toLowerCase().replace('-', '')">
+                    <tr>
                         <td class="player-cell"><span class="player-name" x-text="row.name"></span></td>
                         <td x-text="row.position"></td>
                         <td x-text="row.team"></td>
@@ -82,14 +85,10 @@
                         <td x-text="row.betting_pts ?? '—'"></td>
                         <td><a class="blended-link" :href="'/player/' + row.id + '?week={{ week }}'" x-text="row.blended"></a></td>
                         <td x-text="row.expert || '—'"></td>
-                        <td>
-                            <span class="badge" x-text="row.call"></span>
-                            <div class="note" x-text="row.call_note"></div>
-                        </td>
                     </tr>
                 </template>
                 <tr x-show="filteredRows.length === 0">
-                    <td colspan="9" class="empty-state">
+                    <td colspan="8" class="empty-state">
                         No players match your filters.
                     </td>
                 </tr>

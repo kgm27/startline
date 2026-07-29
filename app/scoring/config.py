@@ -43,13 +43,3 @@ SCORING_RULES = {
         points_per_interception=-2,
     ),
 }
-
-# Rough weekly points needed to be a viable starter, per position (half-PPR).
-# Starting point only — the brief flags this as something to tune with real
-# results, not a final number.
-REPLACEMENT_LEVEL = {
-    "QB": 18.0,
-    "RB": 12.0,
-    "WR": 11.0,
-    "TE": 8.0,
-}

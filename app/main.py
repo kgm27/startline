@@ -17,7 +17,6 @@ from app.scoring.blend import (
     betting_derived_points,
     blend_expected_points,
     expert_perspective,
-    start_sit_recommendation,
     MARKET_TO_STAT,
     STAT_TO_RULE,
     DISCRETE_COUNT_STATS,
@@ -78,7 +77,6 @@ def dashboard(request: Request, week: int = None, position: str = None, note: st
             continue  # no data at all for this player yet — skip rather than show an empty row
 
         expert_persp = expert_perspective(player.position, expert.position_rank if expert else None)
-        rec = start_sit_recommendation(blended, player.position, expert_persp)
 
         rows.append({
             "id": player.id,
@@ -90,17 +88,16 @@ def dashboard(request: Request, week: int = None, position: str = None, note: st
             "betting_pts": betting_pts,
             "blended": blended,
             "expert": expert_persp.label if expert_persp else None,
-            "call": rec.call,
-            "call_note": rec.note,
         })
 
     rows.sort(key=lambda r: r["blended"], reverse=True)
 
     summary = {
         "total": len(rows),
-        "start": sum(1 for r in rows if r["call"] == "Start"),
-        "sit": sum(1 for r in rows if r["call"] == "Sit"),
-        "tossup": sum(1 for r in rows if r["call"] == "Toss-up"),
+        "qb": sum(1 for r in rows if r["position"] == "QB"),
+        "rb": sum(1 for r in rows if r["position"] == "RB"),
+        "wr": sum(1 for r in rows if r["position"] == "WR"),
+        "te": sum(1 for r in rows if r["position"] == "TE"),
     }
 
     return templates.TemplateResponse("dashboard.html", {
@@ -223,7 +220,6 @@ def player_detail(request: Request, player_id: str, week: int = None, db: Sessio
     betting_pts = betting_derived_points(props, scoring)
     blended = blend_expected_points(dfs_pts, betting_pts)
     expert_persp = expert_perspective(player.position, expert.position_rank if expert else None)
-    rec = start_sit_recommendation(blended, player.position, expert_persp) if blended is not None else None
 
     return templates.TemplateResponse("player_detail.html", {
         "request": request,
@@ -235,7 +231,7 @@ def player_detail(request: Request, player_id: str, week: int = None, db: Sessio
         "markets": markets,
         "betting_pts": betting_pts,
         "blended": blended,
-        "rec": rec,
+        "expert": expert_persp,
     })
 
 

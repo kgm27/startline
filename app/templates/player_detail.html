@@ -14,11 +14,10 @@
         <div><span class="summary-label">DFS Projection</span><span class="summary-value">{{ dfs_pts if dfs_pts is not none else "—" }}</span></div>
         <div><span class="summary-label">Betting-Derived</span><span class="summary-value">{{ betting_pts if betting_pts is not none else "—" }}</span></div>
         <div><span class="summary-label">Blended</span><span class="summary-value">{{ blended if blended is not none else "—" }}</span></div>
-        {% if rec %}
-        <div class="call-{{ rec.call|lower|replace('-', '') }}"><span class="summary-label">Call</span><span class="summary-value"><span class="badge">{{ rec.call }}</span></span></div>
+        {% if expert %}
+        <div><span class="summary-label">Expert Perspective</span><span class="summary-value" style="font-size: 1rem;">{{ expert.label }}</span></div>
         {% endif %}
     </section>
-    {% if rec %}<p class="note" style="margin: -1rem 0 1.5rem;">{{ rec.note }}</p>{% endif %}
 
     <h2>DFS Projections</h2>
     {% if dfs_rows %}

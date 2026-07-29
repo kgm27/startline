@@ -9,16 +9,6 @@
     --color-accent: #4f46e5;
     --color-accent-hover: #4338ca;
     --color-accent-light: #eef2ff;
-    --color-start: #15803d;
-    --color-start-bg: #dcfce7;
-    --color-start-border: #bbf7d0;
-    --color-sit: #b91c1c;
-    --color-sit-bg: #fee2e2;
-    --color-sit-border: #fecaca;
-    --color-tossup: #b45309;
-    --color-tossup-bg: #fef3c7;
-    --color-tossup-border: #fde68a;
-    --color-unknown-bg: #f3f4f6;
     --radius-sm: 6px;
     --radius-md: 10px;
     --radius-lg: 14px;
@@ -162,10 +152,6 @@ button:hover, .btn:hover { background: #fafafa; border-color: #d1d5db; }
     margin-top: 0.3rem;
 }
 
-.stat-card.accent-start .stat-value { color: var(--color-start); }
-.stat-card.accent-sit .stat-value { color: var(--color-sit); }
-.stat-card.accent-tossup .stat-value { color: var(--color-tossup); }
-
 /* ---------- Controls: filters + search ---------- */
 
 .controls {
@@ -275,20 +261,6 @@ td.player-cell { white-space: normal; min-width: 140px; }
 }
 .blended-link:hover { color: var(--color-accent); border-bottom-color: var(--color-accent); }
 
-.badge {
-    display: inline-block;
-    font-weight: 700;
-    font-size: 0.75rem;
-    padding: 0.2rem 0.6rem;
-    border-radius: 999px;
-    border: 1px solid transparent;
-}
-
-.call-start .badge { background: var(--color-start-bg); color: var(--color-start); border-color: var(--color-start-border); }
-.call-sit .badge { background: var(--color-sit-bg); color: var(--color-sit); border-color: var(--color-sit-border); }
-.call-tossup .badge { background: var(--color-tossup-bg); color: var(--color-tossup); border-color: var(--color-tossup-border); }
-.call-unknown .badge { background: var(--color-unknown-bg); color: var(--color-text-secondary); }
-
 .note {
     font-size: 0.72rem;
     color: var(--color-text-tertiary);
@@ -325,7 +297,6 @@ td.player-cell { white-space: normal; min-width: 140px; }
     letter-spacing: 0.04em;
 }
 .summary-value { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.02em; }
-.summary-box .badge { font-size: 0.95rem; }
 
 h2 {
     font-size: 0.95rem;
