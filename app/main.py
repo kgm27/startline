@@ -1,4 +1,6 @@
 """FastAPI app: the dashboard page plus a manual "refresh data" action."""
+import json
+
 from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -59,12 +61,11 @@ def dashboard(request: Request, week: int = None, position: str = None, note: st
 
     scoring = SCORING_RULES.get(settings.scoring_format, SCORING_RULES["half_ppr"])
 
-    query = db.query(Player)
-    if position:
-        query = query.filter(Player.position == position.upper())
-
+    # Position filtering/search/sort all happen client-side (see dashboard.html)
+    # for a snappy no-reload experience, so this always loads every position —
+    # `position` is only used to seed which pill starts active.
     rows = []
-    for player in query.all():
+    for player in db.query(Player).all():
         projections = db.query(DfsProjection).filter_by(player_id=player.id, week=week).all()
         props = db.query(OddsProp).filter_by(player_id=player.id, week=week).all()
         expert = db.query(ExpertRank).filter_by(player_id=player.id, week=week).first()
@@ -80,19 +81,34 @@ def dashboard(request: Request, week: int = None, position: str = None, note: st
         rec = start_sit_recommendation(blended, player.position, expert_persp)
 
         rows.append({
-            "player": player,
+            "id": player.id,
+            "name": player.name,
+            "position": player.position,
+            "team": player.team,
+            "injury": player.injury_status,
             "dfs_pts": dfs_pts,
             "betting_pts": betting_pts,
             "blended": blended,
-            "expert": expert_persp,
-            "rec": rec,
+            "expert": expert_persp.label if expert_persp else None,
+            "call": rec.call,
+            "call_note": rec.note,
         })
 
     rows.sort(key=lambda r: r["blended"], reverse=True)
 
+    summary = {
+        "total": len(rows),
+        "start": sum(1 for r in rows if r["call"] == "Start"),
+        "sit": sum(1 for r in rows if r["call"] == "Sit"),
+        "tossup": sum(1 for r in rows if r["call"] == "Toss-up"),
+    }
+
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "rows": rows,
+        "rows_json": json.dumps(rows),
+        "initial_position_json": json.dumps(position.upper() if position else "All"),
+        "summary": summary,
         "week": week,
         "position": position,
         "scoring_format": settings.scoring_format,

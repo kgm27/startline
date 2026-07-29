@@ -1,17 +1,17 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Fantasy Football Start/Sit Advisor — Week {{ week }}</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    <header>
-        <h1>Start/Sit Advisor — Week {{ week }}</h1>
-        <p class="meta">Scoring: {{ scoring_format }}</p>
-        <form action="/refresh" method="post" style="display:inline">
-            <button type="submit">Refresh Data</button>
-        </form>
+{% extends "base.html" %}
+{% block title %}Start/Sit Advisor — Week {{ week }}{% endblock %}
+{% block content %}
+<div class="page" x-data="dashboard()">
+    <header class="topbar">
+        <div class="topbar-titles">
+            <h1>Start/Sit Advisor</h1>
+            <p class="subtitle">Week {{ week }} &middot; Scoring: {{ scoring_format }}</p>
+        </div>
+        <div class="topbar-actions">
+            <form action="/refresh" method="post">
+                <button type="submit" class="btn-primary">Refresh Data</button>
+            </form>
+        </div>
     </header>
 
     {% if not odds_configured or not fantasypros_configured %}
@@ -25,47 +25,124 @@
     <div class="note-banner">{{ note }}</div>
     {% endif %}
 
-    <nav class="filters">
-        <a href="/?week={{ week }}">All</a>
-        {% for pos in ["QB", "RB", "WR", "TE"] %}
-        <a href="/?week={{ week }}&position={{ pos }}">{{ pos }}</a>
-        {% endfor %}
-    </nav>
+    <div class="stat-cards">
+        <div class="stat-card">
+            <div class="stat-value">{{ summary.total }}</div>
+            <div class="stat-label">Players Tracked</div>
+        </div>
+        <div class="stat-card accent-start">
+            <div class="stat-value">{{ summary.start }}</div>
+            <div class="stat-label">Start Calls</div>
+        </div>
+        <div class="stat-card accent-tossup">
+            <div class="stat-value">{{ summary.tossup }}</div>
+            <div class="stat-label">Toss-Ups</div>
+        </div>
+        <div class="stat-card accent-sit">
+            <div class="stat-value">{{ summary.sit }}</div>
+            <div class="stat-label">Sit Calls</div>
+        </div>
+    </div>
 
-    <table>
-        <thead>
-            <tr>
-                <th>Player</th>
-                <th>Pos</th>
-                <th>Team</th>
-                <th>Injury</th>
-                <th>DFS Proj.</th>
-                <th>Betting Est.</th>
-                <th>Blended</th>
-                <th>Expert</th>
-                <th>Call</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in rows %}
-            <tr class="call-{{ row.rec.call|lower|replace('-', '') }}">
-                <td>{{ row.player.name }}</td>
-                <td>{{ row.player.position }}</td>
-                <td>{{ row.player.team }}</td>
-                <td>{{ row.player.injury_status or "—" }}</td>
-                <td>{{ row.dfs_pts if row.dfs_pts is not none else "—" }}</td>
-                <td>{{ row.betting_pts if row.betting_pts is not none else "—" }}</td>
-                <td><a class="blended-link" href="/player/{{ row.player.id }}?week={{ week }}"><strong>{{ row.blended }}</strong></a></td>
-                <td>{{ row.expert.label if row.expert else "—" }}</td>
-                <td>
-                    <span class="badge">{{ row.rec.call }}</span>
-                    <div class="note">{{ row.rec.note }}</div>
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="9">No players with data yet for week {{ week }}. This is normal outside the near-term window before games — DFS/betting lines only post a few days before kickoff.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</body>
-</html>
+    <div class="controls">
+        <div class="pill-filters">
+            <button type="button" class="pill" :class="{active: positionFilter === 'All'}" @click="positionFilter = 'All'">All</button>
+            <template x-for="pos in ['QB', 'RB', 'WR', 'TE']" :key="pos">
+                <button type="button" class="pill" :class="{active: positionFilter === pos}" @click="positionFilter = pos" x-text="pos"></button>
+            </template>
+        </div>
+        <div class="search-box">
+            <input type="text" placeholder="Search players or teams…" x-model="search">
+        </div>
+    </div>
+
+    <div class="table-card">
+        <table>
+            <thead>
+                <tr>
+                    <th class="sortable" :class="{sorted: sortKey === 'name'}" @click="sortBy('name')">Player <span class="sort-arrow" x-text="arrow('name')"></span></th>
+                    <th>Pos</th>
+                    <th>Team</th>
+                    <th>Injury</th>
+                    <th class="sortable" :class="{sorted: sortKey === 'dfs_pts'}" @click="sortBy('dfs_pts')">DFS Proj. <span class="sort-arrow" x-text="arrow('dfs_pts')"></span></th>
+                    <th class="sortable" :class="{sorted: sortKey === 'betting_pts'}" @click="sortBy('betting_pts')">Betting Est. <span class="sort-arrow" x-text="arrow('betting_pts')"></span></th>
+                    <th class="sortable" :class="{sorted: sortKey === 'blended'}" @click="sortBy('blended')">Blended <span class="sort-arrow" x-text="arrow('blended')"></span></th>
+                    <th>Expert</th>
+                    <th>Call</th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="row in filteredRows" :key="row.id">
+                    <tr :class="'call-' + row.call.toLowerCase().replace('-', '')">
+                        <td class="player-cell"><span class="player-name" x-text="row.name"></span></td>
+                        <td x-text="row.position"></td>
+                        <td x-text="row.team"></td>
+                        <td x-text="row.injury || '—'"></td>
+                        <td x-text="row.dfs_pts ?? '—'"></td>
+                        <td x-text="row.betting_pts ?? '—'"></td>
+                        <td><a class="blended-link" :href="'/player/' + row.id + '?week={{ week }}'" x-text="row.blended"></a></td>
+                        <td x-text="row.expert || '—'"></td>
+                        <td>
+                            <span class="badge" x-text="row.call"></span>
+                            <div class="note" x-text="row.call_note"></div>
+                        </td>
+                    </tr>
+                </template>
+                <tr x-show="filteredRows.length === 0">
+                    <td colspan="9" class="empty-state">
+                        No players match your filters.
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        {% if not rows %}
+        <p class="empty-state">No players with data yet for week {{ week }}. This is normal outside the near-term window before games — DFS/betting lines only post a few days before kickoff.</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    const ALL_ROWS = {{ rows_json | safe }};
+    const INITIAL_POSITION = {{ initial_position_json | safe }};
+
+    function dashboard() {
+        return {
+            allRows: ALL_ROWS,
+            positionFilter: INITIAL_POSITION,
+            search: '',
+            sortKey: 'blended',
+            sortDir: 'desc',
+            sortBy(key) {
+                if (this.sortKey === key) {
+                    this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
+                } else {
+                    this.sortKey = key;
+                    this.sortDir = key === 'name' ? 'asc' : 'desc';
+                }
+            },
+            arrow(key) {
+                if (this.sortKey !== key) return '';
+                return this.sortDir === 'asc' ? '▲' : '▼';
+            },
+            get filteredRows() {
+                let rows = this.allRows;
+                if (this.positionFilter !== 'All') {
+                    rows = rows.filter(r => r.position === this.positionFilter);
+                }
+                const q = this.search.trim().toLowerCase();
+                if (q) {
+                    rows = rows.filter(r => r.name.toLowerCase().includes(q) || r.team.toLowerCase().includes(q));
+                }
+                const key = this.sortKey, dir = this.sortDir === 'asc' ? 1 : -1;
+                return [...rows].sort((a, b) => {
+                    let av = a[key], bv = b[key];
+                    if (av === null || av === undefined) av = typeof bv === 'string' ? '' : -Infinity;
+                    if (bv === null || bv === undefined) bv = typeof av === 'string' ? '' : -Infinity;
+                    if (typeof av === 'string') return av.localeCompare(bv) * dir;
+                    return (av - bv) * dir;
+                });
+            }
+        };
+    }
+</script>
+{% endblock %}
