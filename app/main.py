@@ -7,7 +7,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, Request, Depends, HTTPException, Header
+from fastapi import FastAPI, Request, Depends, HTTPException, Header, UploadFile, File
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -1139,6 +1139,24 @@ def debug_info(x_refresh_token: str = Header(None)):
             if p.name.strip() == "data" and p.name != "data"
         },
     }
+
+
+@app.post("/admin/upload-db")
+async def upload_db(file: UploadFile = File(...), x_refresh_token: str = Header(None)):
+    """TEMPORARY, Phase 6.5 (re-added): the first disk mount had a stray
+    trailing space in its path, so this seeds the corrected disk. Same
+    auth pattern as /refresh. Remove once persistence is verified."""
+    settings = get_settings()
+    if not settings.refresh_secret or not secrets.compare_digest(x_refresh_token or "", settings.refresh_secret):
+        raise HTTPException(status_code=401, detail="Missing or invalid X-Refresh-Token header")
+    contents = await file.read()
+    tmp_path = settings.db_path + ".upload_tmp"
+    with open(tmp_path, "wb") as f:
+        f.write(contents)
+    os.replace(tmp_path, settings.db_path)
+    engine.dispose()
+    _PLAYER_ROWS_CACHE.clear()
+    return {"status": "ok", "bytes_written": len(contents)}
 
 
 @app.post("/refresh")
