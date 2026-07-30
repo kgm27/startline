@@ -664,6 +664,12 @@ a.btn, a.btn-primary {
     border-color: var(--color-accent);
 }
 
+.boom-legend {
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+    margin: -0.25rem 0 0.75rem;
+}
+
 /* ---------- Table ---------- */
 
 .table-card {

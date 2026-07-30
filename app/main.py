@@ -1,5 +1,6 @@
 """FastAPI app: the dashboard page plus a manual "refresh data" action."""
 import json
+import logging
 import os
 import secrets
 import time
@@ -10,6 +11,7 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.db import Base, engine, get_db
@@ -49,13 +51,19 @@ RATE_LIMIT_CLEANUP_INTERVAL_SECONDS = 300
 
 
 def _client_ip(request):
-    # Render (like most PaaS) sits the app behind a proxy, so the real
-    # visitor IP arrives via X-Forwarded-For, not request.client.host
-    # (which would otherwise be the proxy's own address). Falls back to
+    # Render (like most PaaS) sits the app behind a single proxy, so the
+    # real visitor IP arrives via X-Forwarded-For, not request.client.host
+    # (which would otherwise be the proxy's own address). Each hop
+    # *appends* its own observed address, so with exactly one trusted
+    # proxy in front, the LAST entry is the one Render itself recorded —
+    # everything before it came from the client's own (spoofable) header
+    # and can't be trusted for rate limiting. Falls back to
     # request.client.host for local dev, where that header isn't set.
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        parts = [p.strip() for p in forwarded.split(",") if p.strip()]
+        if parts:
+            return parts[-1]
     return request.client.host if request.client else "unknown"
 
 
@@ -88,7 +96,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-app = FastAPI(title="StartLine")
+app = FastAPI(title="StartLine", docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(RateLimitMiddleware)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
@@ -100,6 +108,62 @@ templates.env.globals["style_version"] = str(int(os.path.getmtime("app/static/st
 templates.env.globals["app_js_version"] = str(int(os.path.getmtime("app/static/app.js")))
 templates.env.globals["favicon_version"] = str(int(os.path.getmtime("app/static/favicon.svg")))
 templates.env.filters["tojson"] = json.dumps
+
+
+def _script_safe_json(value):
+    """JSON for direct embedding inside a <script> block (e.g. `const X =
+    {{ rows_json | safe }}`). Escapes characters the HTML parser treats
+    specially before JS ever sees them, so a value containing a literal
+    "</script>" (or "<!--") can't prematurely close the block and let
+    whatever follows run as unescaped markup. This is deliberately
+    separate from the `tojson` filter above: that one feeds Alpine
+    directive *attributes* (e.g. :style="...") and relies on Jinja's
+    normal autoescaping of its plain, unmarked string output; this one is
+    pre-escaped and always used with `| safe` for the different,
+    script-tag context."""
+    return (
+        json.dumps(value)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace("'", "\\u0027")
+    )
+
+
+def _error_page(request, status_code, heading, message):
+    return templates.TemplateResponse(
+        "error.html",
+        {"request": request, "status_code": status_code, "heading": heading, "message": message},
+        status_code=status_code,
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    # Only 404s (a bad URL/player id) get the branded page — every other
+    # HTTPException (400 bad ?week=, 401 on /refresh, etc.) keeps the
+    # plain JSON `{"detail": ...}` response FastAPI would normally send,
+    # since those are meaningful, safe-to-show messages already, not a
+    # leak to hide behind a generic page.
+    if exc.status_code == 404:
+        return _error_page(
+            request, 404, "Page not found",
+            "That page doesn't exist. It may have been moved, or the link might be out of date.",
+        )
+    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    # A genuine bug/crash: log the real error (with traceback) server-side
+    # only, never show it to a visitor — matches the same principle as the
+    # /refresh error-logging fix in Phase 5.4 (raw exception text can leak
+    # internal details, so it never reaches an HTTP response body).
+    logging.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    return _error_page(
+        request, 500, "Something went wrong",
+        "An unexpected error occurred on our end. Try refreshing, or come back in a bit.",
+    )
 
 STAT_LABELS = {
     "pass_yds": "Passing Yards",
@@ -232,6 +296,13 @@ def _resolve_week(db, requested_week):
     (week, is_demo) — is_demo is True whenever the displayed week isn't
     genuinely the current live week, so callers can show a "demo data"
     banner rather than silently passing off stale data as current."""
+    if requested_week is not None and not (1 <= requested_week <= 30):
+        # A regular season + playoffs never exceeds this range; anything
+        # outside it is a malformed/abusive ?week= value (e.g. a huge
+        # number that overflows SQLite's INTEGER column and crashes the
+        # page) rather than a real week someone would legitimately request.
+        raise HTTPException(status_code=400, detail="week must be between 1 and 30")
+
     current_week = None
     try:
         current_week = fetch_current_week()
@@ -618,8 +689,8 @@ def dashboard(request: Request, week: int = None, position: str = None, note: st
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "rows": rows,
-        "rows_json": json.dumps(rows),
-        "initial_position_json": json.dumps(position.upper() if position else "All"),
+        "rows_json": _script_safe_json(rows),
+        "initial_position_json": _script_safe_json(position.upper() if position else "All"),
         "summary": summary,
         "week": week,
         "position": position,
@@ -648,9 +719,9 @@ def compare(request: Request, week: int = None, a: str = None, b: str = None, db
 
     return templates.TemplateResponse("compare.html", {
         "request": request,
-        "rows_json": json.dumps(rows),
-        "initial_a_json": json.dumps(initial_a),
-        "initial_b_json": json.dumps(initial_b),
+        "rows_json": _script_safe_json(rows),
+        "initial_a_json": _script_safe_json(initial_a),
+        "initial_b_json": _script_safe_json(initial_b),
         "week": week,
         "is_demo_week": is_demo_week,
         "active_page": "compare",
@@ -925,7 +996,7 @@ def player_detail(request: Request, player_id: str, week: int = None, db: Sessio
         "blended": blended,
         "expert": expert_persp,
         "headline_trend": headline_trend,
-        "headline_trend_json": json.dumps(headline_trend),
+        "headline_trend_json": _script_safe_json(headline_trend),
         "boom": boom,
         "is_demo_week": is_demo_week,
     })
@@ -1067,8 +1138,14 @@ def refresh(db: Session = Depends(get_db), x_refresh_token: str = Header(None)):
             prediction_count = capture_prediction_snapshots(db, week)
             notes.append(f"Captured {prediction_count} headline-score snapshot(s) for the trend charts")
             _PLAYER_ROWS_CACHE.clear()  # so the new data shows immediately, not after the cache TTL
-        except Exception as exc:
-            notes.append(f"Odds refresh failed: {exc}")
+        except Exception:
+            # Never surface the raw exception text on the public dashboard
+            # or in the redirect URL: httpx includes the request URL in its
+            # error messages, and the Odds API key travels as a query
+            # param, so a raw failure could print the real key on a public
+            # page and in access logs. Log server-side only.
+            logging.exception("Odds refresh failed")
+            notes.append("Odds refresh failed, check server logs for details")
 
     query = ""
     if notes:

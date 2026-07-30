@@ -88,7 +88,7 @@
                             </div>
                             <template x-if="playerA.injury">
                                 <div class="compare-injury-flag"
-                                     @mouseenter="showTooltip($event, INJURY_DEFINITIONS[playerA.injury] || playerA.injury)"
+                                     @mouseenter="showTooltip($event, INJURY_DEFINITIONS[playerA.injury] || escapeHtml(playerA.injury))"
                                      @mouseleave="hideTooltip()">
                                     <span x-text="playerA.injury"></span>
                                 </div>
@@ -102,7 +102,7 @@
                             </div>
                             <template x-if="playerB.injury">
                                 <div class="compare-injury-flag"
-                                     @mouseenter="showTooltip($event, INJURY_DEFINITIONS[playerB.injury] || playerB.injury)"
+                                     @mouseenter="showTooltip($event, INJURY_DEFINITIONS[playerB.injury] || escapeHtml(playerB.injury))"
                                      @mouseleave="hideTooltip()">
                                     <span x-text="playerB.injury"></span>
                                 </div>

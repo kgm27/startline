@@ -77,6 +77,8 @@
             </div>
         </div>
 
+        <p class="boom-legend">🚀 High ceiling — hover the badge next to a player's name for the odds behind it</p>
+
         <div class="table-card">
             <table class="dashboard-table">
                 <thead>
@@ -107,7 +109,7 @@
                             <td>
                                 <template x-if="row.injury">
                                     <span class="hover-tag"
-                                          @mouseenter="showTooltip($event, INJURY_DEFINITIONS[row.injury] || row.injury)"
+                                          @mouseenter="showTooltip($event, INJURY_DEFINITIONS[row.injury] || escapeHtml(row.injury))"
                                           @mouseleave="hideTooltip()"
                                           x-text="row.injury"></span>
                                 </template>

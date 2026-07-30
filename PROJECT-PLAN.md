@@ -370,8 +370,43 @@ reads straight off that same curve (e.g. P(yards ≥ line + 30) is already in th
       across all history: no `.db` file, no `.env`, no stray scratch/test scripts with hardcoded credentials.
       Also confirmed `.env.example` only has empty placeholder values and the new `Procfile` has no secrets in
       it, before either gets committed.
-- [ ] **5.4** Run a security review before launch (`/security-review`).
-- [ ] **5.5** Add clean 404/500 error pages that don't leak internal details.
+- [x] **5.4** Run a security review before launch (`/security-review`). Done: the skill itself couldn't run
+      (it diffs against `origin/HEAD`, and this repo has no GitHub remote yet, that's Phase 6.1), so did a manual
+      full-codebase review instead. Found and fixed 6 real issues: (1) a failed Odds API call could print the raw
+      exception (which can contain the API key, since httpx embeds request URLs in its errors) onto the public
+      dashboard and into logs, now logged server-side only via a generic message; (2) the rate limiter trusted the
+      first `X-Forwarded-For` entry, which is attacker-controlled and spoofable, switched to the last entry (the
+      one Render's own proxy appends); (3) `?week=` accepted unbounded integers, confirmed live that a huge value
+      crashes the page (`OverflowError`), now rejects anything outside 1-30 with a clean 400; (4) the injury-status
+      hover tooltip (Dashboard, Compare, and Player detail, the last one wasn't caught by the reviewing agent, found
+      it by pattern-matching) rendered raw unescaped text via Alpine's `x-html` for any status not in the known
+      lookup table, now escaped consistently with every other tooltip on the site; (5) player/team JSON embedded
+      into `<script>` blocks had HTML-safety escaping disabled entirely (a custom `tojson` override plus `|safe`),
+      added a dedicated `_script_safe_json()` helper (escapes `<`, `>`, `&`, `'` so a value can't prematurely close
+      the script tag) used only for script-tag embeds, left the original `tojson` filter untouched since it's
+      still needed for Alpine attribute contexts; (6) `/docs` and `/openapi.json` were publicly live, now disabled.
+      Checked but not upgraded: `pip-audit` flagged known CVEs in starlette/python-dotenv/python-multipart, but
+      verified directly that the "fixed" versions it cited don't exist on PyPI yet, every pin here is already the
+      latest available release, nothing to bump. Verified all 6 fixes live (curl + browser): `/docs` and
+      `/openapi.json` 404, an oversized `?week=` returns a clean 400 while normal weeks still work, `/compare` and
+      `/dashboard` still render correctly with the new script-safe JSON, and a simulated malicious injury string
+      now renders HTML-escaped instead of raw. Confirmed clean (no changes needed): no SQL injection anywhere (all
+      queries go through the ORM), static file serving isn't vulnerable to path traversal, CORS has no wide-open
+      middleware registered, the refresh-token auth gates every code path before any paid API call, no hardcoded
+      secrets anywhere in the repo. Deferred as "nice to have" (not required before launch): no HTTP security
+      headers (X-Frame-Options etc.), no Subresource Integrity hash on the Alpine.js CDN script, the `?note=`
+      dashboard param is safely escaped but still an open reflection point worth tightening later.
+- [x] **5.5** Add clean 404/500 error pages that don't leak internal details. Done: a new shared `error.html`
+      template (matches the site's hero styling, status badge + heading + message + "Back to Dashboard" button),
+      plus two FastAPI exception handlers in `main.py`. 404s (bad URL, unknown player id) now render the branded
+      page; every other `HTTPException` (400 bad `?week=`, 401 on `/refresh`) still returns the same plain JSON
+      as before, those are already safe, meaningful messages, not something to hide. A new catch-all handler for
+      any genuine unhandled crash logs the real exception (with traceback) server-side only via `logging.exception`
+      and shows the visitor the same generic branded 500 page, never the raw error. Verified live: added a
+      temporary `/__test_crash` route that deliberately raised an exception, confirmed the response body contained
+      no trace of the exception type/message/file path while the real traceback appeared in the server log, then
+      removed the test route and re-confirmed the 404 handler, all four core pages, and the temporary route's own
+      404 (proving the removal took effect) all still work. Screenshots of both pages taken in-browser.
 
 ## Phase 6 — Deploy for the first time
 
@@ -640,3 +675,25 @@ a cheap **daily** headline pull (feeds the Phase 3B trend chart) and the fuller 
 - 2026-07-30 — 5.3 done: confirmed `.env` was never committed in this repo's history (checked, not just assumed)
   and searched every commit's full diff for real leaked key values, none found. Also spot-checked the current
   uncommitted `.env.example` and `Procfile` for accidental secrets before they get committed. All clean.
+- 2026-07-30 — Ran a full manual security review (5.4) since the `/security-review` skill needs a GitHub remote
+  to diff against, which doesn't exist yet (Phase 6.1). Found 7 issues, owner chose to fix all of them. Fixed 6
+  in `app/main.py` and the templates: raw exception text (which can contain the live Odds API key) no longer
+  reaches the public dashboard/logs on a failed refresh; the rate limiter now trusts the last `X-Forwarded-For`
+  entry instead of the spoofable first one; `?week=` now rejects out-of-range values (confirmed live it used to
+  crash the page); the injury-status tooltip's fallback text is now HTML-escaped on all three pages that show it
+  (Dashboard, Compare, Player detail); JSON embedded in `<script>` blocks now goes through a new
+  `_script_safe_json()` helper instead of raw `json.dumps` + `|safe`; `/docs` and `/openapi.json` are disabled.
+  The 7th (outdated dependencies per `pip-audit`) turned out to be a no-op on inspection: the "fixed" versions it
+  cited for starlette/python-dotenv/python-multipart aren't published on PyPI yet, every pin here is already the
+  latest available. Verified all 6 fixes live via curl and the browser. Left as future nice-to-haves (not
+  blocking launch): no HTTP security headers, no SRI hash on the Alpine.js CDN script, the `?note=` param is
+  safely escaped but still an open reflection point. Owner confirmed 2026-07-30, checked off.
+- 2026-07-30 — Owner flagged the 🚀 boom badge (3C.5) was hover-only with no indication it's hoverable, so people
+  wouldn't know to check it. Added a small caption line above the Dashboard table: "🚀 High ceiling — hover the
+  badge next to a player's name for the odds behind it." Player detail's boom callout wasn't touched since it's
+  already an always-visible sentence, no legend needed there. Verified live via screenshot.
+- 2026-07-30 — 5.5 built and confirmed: added `error.html` (shared branded template for both 404 and 500) and two
+  exception handlers in `main.py`. 404s now show the branded page; 400/401 keep their existing plain JSON (already
+  safe/meaningful, not a leak). Unhandled crashes are logged server-side with the full traceback and show
+  visitors a generic branded 500 page. Verified live with a temporary crash route: confirmed no exception detail
+  leaked into the response body, then removed the test route. Owner confirmed 2026-07-30, checked off.

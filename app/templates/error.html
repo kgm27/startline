@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}StartLine - {{ status_code }}{% endblock %}
+{% block content %}
+<div class="page hero-page">
+    <section class="hero error-hero">
+        <span class="hero-eyebrow">{{ status_code }}</span>
+        <h1 class="hero-title">{{ heading }}</h1>
+        <p class="hero-subtitle">{{ message }}</p>
+        <div class="hero-actions">
+            <a href="/dashboard" class="btn-primary btn-lg">Back to Dashboard &rarr;</a>
+        </div>
+    </section>
+</div>
+{% endblock %}

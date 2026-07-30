@@ -13,7 +13,7 @@
                 {% if player.injury_status %}
                 &middot;
                 <span class="hover-tag"
-                      @mouseenter="showTooltip($event, INJURY_DEFINITIONS[{{ player.injury_status | tojson }}] || {{ player.injury_status | tojson }})"
+                      @mouseenter="showTooltip($event, INJURY_DEFINITIONS[{{ player.injury_status | tojson }}] || escapeHtml({{ player.injury_status | tojson }}))"
                       @mouseleave="hideTooltip()">{{ player.injury_status }}</span>
                 {% endif %}
             </p>
