@@ -6,7 +6,7 @@ import secrets
 import time
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import FastAPI, Request, Depends, HTTPException, Header, UploadFile, File
+from fastapi import FastAPI, Request, Depends, HTTPException, Header
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -1105,28 +1105,6 @@ def capture_prediction_snapshots(db: Session, week: int) -> int:
 
     db.commit()
     return written
-
-
-@app.post("/admin/upload-db")
-async def upload_db(file: UploadFile = File(...), x_refresh_token: str = Header(None)):
-    """TEMPORARY, Phase 6.5 only: one-time way to seed the production SQLite
-    file with the real local backtest data, without re-spending Odds API
-    credits or standing up SSH/CLI access. Same auth pattern as /refresh.
-    Writes to a temp file then atomically replaces the real db file, and
-    disposes the SQLAlchemy connection pool so every subsequent request
-    opens the new file instead of a pooled connection to the old one.
-    Remove this endpoint once the production database is seeded."""
-    settings = get_settings()
-    if not settings.refresh_secret or not secrets.compare_digest(x_refresh_token or "", settings.refresh_secret):
-        raise HTTPException(status_code=401, detail="Missing or invalid X-Refresh-Token header")
-    contents = await file.read()
-    tmp_path = settings.db_path + ".upload_tmp"
-    with open(tmp_path, "wb") as f:
-        f.write(contents)
-    os.replace(tmp_path, settings.db_path)
-    engine.dispose()
-    _PLAYER_ROWS_CACHE.clear()
-    return {"status": "ok", "bytes_written": len(contents)}
 
 
 @app.post("/refresh")
