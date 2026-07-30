@@ -94,7 +94,14 @@
                 <tbody>
                     <template x-for="row in filteredRows" :key="row.id">
                         <tr>
-                            <td class="player-cell"><span class="player-name" x-text="row.name"></span></td>
+                            <td class="player-cell">
+                                <span class="player-name" x-text="row.name"></span>
+                                <template x-if="row.boom_flag">
+                                    <span class="boom-badge hover-tag"
+                                          @mouseenter="showTooltip($event, row.boom_tooltip)"
+                                          @mouseleave="hideTooltip()">🚀</span>
+                                </template>
+                            </td>
                             <td x-text="row.position"></td>
                             <td><span class="team-badge" :style="teamStyle(row.team)" x-text="row.team"></span></td>
                             <td>
@@ -110,7 +117,11 @@
                             </td>
                             <td x-text="fmt1(row.dfs_pts)"></td>
                             <td x-text="fmt1(row.betting_pts)"></td>
-                            <td><a class="blended-link" :href="'/player/' + row.id + '?week={{ week }}'" x-text="fmt1(row.blended)"></a></td>
+                            <td>
+                                <a class="blended-link" :href="'/player/' + row.id + '?week={{ week }}'" x-text="fmt1(row.blended)"></a>
+                                <span class="row-trend" x-show="row.trend_svg" x-html="row.trend_svg"></span>
+                                <span class="row-trend-empty" x-show="!row.trend_svg">—</span>
+                            </td>
                             <td x-text="row.expert || '—'"></td>
                         </tr>
                     </template>

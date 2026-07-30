@@ -126,19 +126,33 @@ The plan has two parts:
       specific metric. The Injury row was replaced with a callout badge (amber pill, hover tooltip) directly under
       the player's name/team so it's visible without scanning a table row. Verified live in-browser: search/select
       for both slots, swap, Change/reset, URL sync, and the injury callout (tested with Dak Prescott/Questionable).
-- [ ] **2.5** **About / Methodology** — write the plain-language explanation of the DFS + odds + expert blend, and
-      why blending beats any single source. This is what sells the project.
-- [ ] **2.6** **Global UX** — nav bar, page titles, favicon, and a "demo data — Week 15 2025" banner while
+- [x] **2.5** **About / Methodology**: write the plain-language explanation of the DFS + odds + expert blend, and
+      why blending beats any single source. This is what sells the project. Done: full page covering why one
+      source isn't enough, the three inputs, and a 4-step numbered walkthrough of how they become one blended
+      score (with real half-PPR scoring rates). The worked example is **live, not hardcoded**: `/about` now
+      computes this week's #1 blended-score player server-side (same `_player_rows()` helper as Dashboard/Compare)
+      and shows their real DFS/Sportsbook/Blended numbers with a link straight into their actual Player detail
+      page, so the methodology page is provably accurate rather than an illustrative mockup. Verified live in-browser,
+      including clicking through to the example player's page and confirming the numbers match exactly.
+- [x] **2.6** **Global UX**: nav bar, page titles, favicon, and a "demo data, Week 15 2025" banner while
       off-season (ties to **D3**). *(Desktop is the priority; dedicated mobile work is deferred to optional Phase 10.)*
-      Nav bar/page titles done (Phase 1). Demo banner done (see D3, above). Favicon still outstanding.
+      Nav bar/page titles done (Phase 1). Demo banner done (see D3, above). Favicon done: a simple SVG (purple
+      rounded square, white "FF", matching the nav logo) at `/static/favicon.svg`, cache-busted the same way as
+      `style.css`/`app.js`. Owner is fine using this proposed version for now and may revisit the design later.
 
 ## Phase 3 — Finish the data sources (FantasyPros — launch blocker)
 
 *Goal: the expert-rankings column is live, not a placeholder "—".*
 
-- [ ] **3.1** Get a FantasyPros API key. *(You had trouble signing up before — Claude can walk you through it step
-      by step, and flag any cost before you commit; see [`fantasy-football-data-sources`] notes.)*
-- [ ] **3.2** Add the key to your `.env` and confirm the app picks it up.
+- [x] **3.1** Get a FantasyPros API key. *(You had trouble signing up before, Claude can walk you through it step
+      by step, and flag any cost before you commit; see [`fantasy-football-data-sources`] notes.)* Done: key
+      obtained 2026-07-30.
+- [x] **3.2** Add the key to your `.env` and confirm the app picks it up. Done: key added, confirmed working with
+      a live test call. 🔴 **Found a real blocker**: the key is on FantasyPros' free tier, which per the live API
+      response (`"tier": "free"`, `"public_api_limited": true`) always returns Week 1 preseason rankings no
+      matter what week is requested (tested week 15 and week 3, both 2025 and 2026, all returned the same Week 1
+      data). Full weekly archives need the paid MVP/HOF membership already flagged in the brief (~$6-13/mo).
+      Owner is upgrading later today; 3.3-3.5 are paused until then.
 - [ ] **3.3** Un-hide / populate the expert column on the Dashboard and Player detail pages (the code already
       degrades gracefully; this switches it on).
 - [ ] **3.4** Decide how expert rankings appear on the new Comparison page.
@@ -153,39 +167,76 @@ standout resume feature (it shows the numbers changing as real information arriv
 until the daily job has been running for a few days in-season. During the Week 15 2025 demo there's no daily
 history to plot — plan for a graceful "not enough history yet" state.*
 
-- [ ] **3B.1** **Store daily snapshots.** Add a new table (e.g. `PredictionSnapshot`) that records each player's
-      headline numbers — DFS points, betting-derived points, blended score — stamped with the date. Today's tables
-      keep only the latest values; this new table is what makes a *history* to chart. Additive — doesn't change the
-      existing tables.
-- [ ] **3B.2** **Write a snapshot each day.** Have the daily job (Phase 7) save one snapshot row per player per day.
+- [x] **3B.1** **Store daily snapshots.** Add a new table (e.g. `PredictionSnapshot`) that records each player's
+      headline numbers: DFS points, betting-derived points, blended score, stamped with the date. Today's tables
+      keep only the latest values; this new table is what makes a *history* to chart. Additive, doesn't change the
+      existing tables. Done: `PredictionSnapshot` added to `models.py` (player, week, dfs_pts, betting_pts,
+      blended, snapshot_date), same one-row-per-day pattern as `ThresholdSnapshot`.
+- [x] **3B.2** **Write a snapshot each day.** Have the daily job (Phase 7) save one snapshot row per player per day.
+      Done for the capture logic itself: `capture_prediction_snapshots(db, week)` reads each player's already-fetched
+      DfsProjection/OddsProp rows (no extra API calls) and upserts today's snapshot; wired into `/refresh` right
+      alongside `capture_threshold_snapshots()`. The actual daily *automated* trigger is still Phase 7 (scheduling
+      doesn't exist yet); for now this runs whenever `/refresh` is called manually.
 - [ ] **3B.3** **Keep the daily pull cheap.** Pull only the lightweight headline lines daily; leave the expensive
-      full-alternate pull on its weekly cadence. Ties to **D5** — confirm the credit cost before switching it on.
-- [ ] **3B.4** **Design where the chart appears.** Recommendation: a small "sparkline" trend in each Dashboard row,
+      full-alternate pull on its weekly cadence. Ties to **D5**, confirm the credit cost before switching it on.
+      Not applicable to the capture logic itself (`capture_prediction_snapshots` spends zero extra API credits,
+      it only reads data already fetched); this item is really about Phase 7's pull cadence and stays open until
+      that's built.
+- [x] **3B.4** **Design where the chart appears.** Recommendation: a small "sparkline" trend in each Dashboard row,
       plus a larger, labeled line chart on the Player detail page. Confirm what you want (ties to Phase 2.2 / 2.3).
-- [ ] **3B.5** **Build the chart.** Use a lightweight approach that fits the no-build-step stack (hand-drawn inline
+      Done as recommended: a tiny axis-free sparkline next to the Blended number on each Dashboard row (shows "—"
+      when a player has no history yet), and a larger, axis-labeled chart card on Player detail with tabs to
+      switch between Blended / DFS Projection / Sportsbook Projection.
+- [x] **3B.5** **Build the chart.** Use a lightweight approach that fits the no-build-step stack (hand-drawn inline
       SVG, or a tiny CDN chart library). Show the blended line by default; optionally toggle DFS vs betting lines.
-- [ ] **3B.6** **Handle the empty state** — a clear "collecting data — check back in a few days" message when a
-      player has too few snapshots to draw a meaningful line.
-- [ ] **3B.7** Verify end-to-end: run the daily snapshot a few times (or backfill test rows), confirm the chart
-      renders and updates.
-- [ ] **3B.8** **Credit optimization — only pull games in play.** On hourly ticks, fetch only the games actually
+      Done: hand-drawn inline SVG (no chart library), reusing the same `_trend_chart_svg()` renderer built for
+      3B.10's per-threshold charts, generalized to support a points-based axis (not just percentages). Blended is
+      the default tab; DFS/Sportsbook are one click away.
+- [x] **3B.6** **Handle the empty state**: a clear "collecting data, check back in a few days" message when a
+      player has too few snapshots to draw a meaningful line. Done using the same grayed-mockup-plus-overlay
+      pattern built for 3B.10 (`_placeholder_prediction_trend_svg()`), anchored to the player's real current
+      number rather than a generic "no data" box. Dashboard's tiny row sparkline uses a simpler "—" dash instead,
+      since there's no room for a message in that small a space.
+- [x] **3B.7** Verify end-to-end: run the daily snapshot a few times (or backfill test rows), confirm the chart
+      renders and updates. Done: temporarily inserted synthetic `PredictionSnapshot` rows for Joe Burrow (Player
+      detail, all 3 tabs) and Josh Allen/McCaffrey (Dashboard sparklines), confirmed real (non-placeholder) charts
+      rendered correctly with real axes/trend lines, then deleted the test rows, same pattern as 3B.10's original
+      verification.
+- [ ] **3B.8** **Credit optimization: only pull games in play.** On hourly ticks, fetch only the games actually
       being played / not yet final (on Thu/Mon that's one game, not the whole 16-game slate). Big credit saver.
-- [ ] **3B.9** **Credit optimization — split the call by region.** Request the `us` sportsbook markets and the
+      Deferred to Phase 7 (the live pull cadence), not applicable to the snapshot/chart feature itself.
+- [ ] **3B.9** **Credit optimization: split the call by region.** Request the `us` sportsbook markets and the
       `us_dfs` DFS market in separate calls so you don't pay `markets × regions` for combinations that don't exist.
       Roughly halves the headline-pull cost. (On the 100K plan these two are "nice"; on 20K they'd be load-bearing.)
-- [ ] **3B.10** **Historical "Chance of Going Over" %, not just headline points.** Extends this phase's trend idea
-      to the per-threshold probabilities shown in each Sportsbook Markets table (e.g. Rushing Yards @ 24.5 →
+      Deferred to Phase 7 (the live pull cadence), not applicable to the snapshot/chart feature itself.
+- [x] **3B.10** **Historical "Chance of Going Over" %, not just headline points.** Extends this phase's trend idea
+      to the per-threshold probabilities shown in each Sportsbook Markets table (e.g. Rushing Yards @ 24.5:
       92.4%), not just the three headline numbers from 3B.1. Added `ThresholdSnapshot` (player, week, stat,
-      threshold, probability, day) — a same-day refresh updates that day's row instead of piling up duplicates.
+      threshold, probability, day): a same-day refresh updates that day's row instead of piling up duplicates.
       `/refresh` now writes one snapshot per (player, stat, threshold) with real curve data every time it runs.
-      UI: every threshold's percentage is hoverable (same pattern as every other hover on the page — no separate
-      dot/icon cluttering the table). Once 2+ days of history exist, hovering shows a real trend-line chart —
+      UI: every threshold's percentage is hoverable (same pattern as every other hover on the page, no separate
+      dot/icon cluttering the table). Once 2+ days of history exist, hovering shows a real trend-line chart,
       sized for the tooltip (not squeezed into a table cell), with the date range and percentage range labeled
-      directly on the chart. Until then, hovering explains "trend data starts updating about a week before
-      kickoff, once lines are posted for this week's games." Verified with temporary synthetic snapshot rows
-      (inserted, confirmed the chart + labels render correctly, then deleted) — the 638 rows now in the table
-      are real, from the already-stored/paid-for odds data (today's genuine first snapshot), not fabricated.
-      History will keep accumulating each time `/refresh` runs with fresh odds data.
+      directly on the chart. Verified with temporary synthetic snapshot rows (inserted, confirmed the chart and
+      labels render correctly, then deleted); the 638 rows now in the table are real, from the
+      already-stored/paid-for odds data (that day's genuine first snapshot), not fabricated. History keeps
+      accumulating each time `/refresh` runs with fresh odds data. Checkbox was previously left unchecked despite
+      this being built and verified; confirmed still working and checked off today. **2026-07-30 update:** until
+      2+ days of history exist, hovering used to show plain text only; now it shows a real mockup of the eventual
+      chart instead, grayed out with the explanation overlaid on top. `_placeholder_sparkline_svg()` builds a
+      larger chart (280x132, up from the first pass's small unlabeled squiggle) with a real x-axis (the actual
+      preceding 5 calendar dates, ending today) and a real y-axis (percentages, scaled tightly around this
+      threshold's actual current probability rather than a fixed 0-100% range). Only the current/last point is
+      real; the four earlier points are a deterministic, illustrative wiggle around it, not real history, kept
+      honest by staying visually dimmed with the message layered on top. **Follow-up done same day:** the real
+      chart (`_sparkline_svg`, once 2+ real days of history exist) now shares the same renderer as the mockup
+      (`_trend_chart_svg()`), so both use identical real axes, sizing, and styling; the only difference is the
+      mockup is dimmed with the message overlay and the real one is full brightness. The shared renderer also
+      thins x-axis date labels to at most 5 so it won't get cluttered once real history grows past a handful of
+      days in-season (the line itself still plots every point). Verified by temporarily inserting synthetic
+      `ThresholdSnapshot` rows for Joe Burrow's Passing TDs 0.5 threshold (3 dates), confirming the real
+      (non-dimmed) chart rendered correctly with proper axes, then deleting them, same pattern as the original
+      3B.10 verification.
 
 ## Phase 3C — Boom-potential (ceiling) indicator (new)
 
@@ -204,25 +255,42 @@ and Phase 3B.10 already stores those per-threshold probabilities over time in `T
 reads straight off that same curve (e.g. P(yards ≥ line + 30) is already in the data). This is mostly a new metric
 + a badge, not a new data source.*
 
-- [ ] **3C.1** **Define the "boom" metric.** Recommendation: for a player's main stat, read the survival curve for
+- [x] **3C.1** **Define the "boom" metric.** Recommendation: for a player's main stat, read the survival curve for
       the probability of beating the line by a meaningful margin. Decide: absolute margin (e.g. +30 yards),
-      relative (+X% over the line), or an upper-tail percentile — and whether the margin is set per-stat (30 yards
-      means very different things for pass yards vs receptions).
-- [ ] **3C.2** **Decide the scope.** v1 recommendation: score the player's single **main stat** (rush yds for RBs,
+      relative (+X% over the line), or an upper-tail percentile, and whether the margin is set per-stat (30 yards
+      means very different things for pass yards vs receptions). Decided: **relative margin, 30% over the
+      market's own expected value** (`BOOM_MARGIN = 0.30`), not a fixed yardage number, so it means the same
+      thing whether the stat is pass yards or receiving yards. Read via a new `_interpolate_survival()` helper
+      (linear interpolation between the two nearest quoted thresholds); returns "n/a" rather than guessing when
+      30% over expectation falls beyond the highest line a book quoted.
+- [x] **3C.2** **Decide the scope.** v1 recommendation: score the player's single **main stat** (rush yds for RBs,
       rec yds for WRs, pass yds for QBs). Combining every stat into one fantasy-point "ceiling" is more powerful but
-      needs merging several distributions — leave that as a v2.
-- [ ] **3C.3** **Compute a ceiling score + a simple flag** (e.g. top-quartile tail → a 🚀 "high ceiling" badge).
-- [ ] **3C.4** **Reuse existing data / handle the dependency.** The tail probabilities come from the alternate-line
-      survival curve, i.e. the same data behind `ThresholdSnapshot` (3B.10) — pulled by the **weekly full pull**,
+      needs merging several distributions, leave that as a v2. Done as recommended: `MAIN_STAT_BY_POSITION` maps
+      QB to pass_yds, RB to rush_yds, WR/TE to reception_yds.
+- [x] **3C.3** **Compute a ceiling score + a simple flag** (e.g. top-quartile tail → a 🚀 "high ceiling" badge).
+      Done: flag is the top quartile of `boom_prob` *within each position* (not a fixed cutoff), computed once per
+      Dashboard load in `_player_rows()`, skipped entirely for a position if fewer than 4 players have a real
+      boom_prob to rank against. Verified 48 players flagged across QB/RB/WR/TE in the current Week 15 dataset.
+- [x] **3C.4** **Reuse existing data / handle the dependency.** The tail probabilities come from the alternate-line
+      survival curve, i.e. the same data behind `ThresholdSnapshot` (3B.10), pulled by the **weekly full pull**,
       not the daily headline pull (D5 / 3B.3). So the score refreshes weekly and exists only for games/players
-      where alternates were pulled; show "n/a" (not a fake 0) everywhere else.
-- [ ] **3C.5** **UI.** A badge/column on the Dashboard (ties to Phase 2.2) and a tail breakdown on the Player
-      detail page (Phase 2.3) — ideally showing the real number, e.g. "38% chance of 30+ yards over the line."
-- [ ] **3C.6** *(Optional companion)* **Floor / "bust" indicator** — the mirror tail, P(outcome ≤ line − margin) —
-      to separate safe plays from boom-or-bust plays. Not required for v1, but nearly free once 3C.1–3C.3 exist.
-- [ ] **3C.7** **Verify against a known example.** The Titans@49ers game already has real alternate-line data (e.g.
-      McCaffrey's rush yards came out right-skewed, ~73 vs a ~65.5 line) — a good sanity check that the tail math
-      is reading the curve correctly.
+      where alternates were pulled; show "n/a" (not a fake 0) everywhere else. Done: `_main_stat_curve()` reuses
+      the same `MIN_THRESHOLDS_FOR_CURVE` richness gate `betting_derived_points()` uses; players without a rich
+      enough curve get `boom_prob = None` and are simply left out of the Dashboard flag and the Player detail
+      callout (no fake number, no visible "n/a" clutter on rows where it doesn't apply).
+- [x] **3C.5** **UI.** A badge/column on the Dashboard (ties to Phase 2.2) and a tail breakdown on the Player
+      detail page (Phase 2.3), ideally showing the real number, e.g. "38% chance of 30+ yards over the line."
+      Done: a 🚀 badge next to the player's name on Dashboard rows (hover tooltip with the real percentage and
+      stat), and an accent-colored callout on Player detail with the actual sentence, e.g. "25% chance of topping
+      95.4 yds for Rushing Yards (30% above the market's projected 73.4 yds)."
+- [ ] **3C.6** *(Optional companion)* **Floor / "bust" indicator**: the mirror tail, P(outcome ≤ line - margin),
+      to separate safe plays from boom-or-bust plays. Not required for v1, but nearly free once 3C.1-3C.3 exist.
+      Not built (optional, deferred).
+- [x] **3C.7** **Verify against a known example.** The Titans@49ers game already has real alternate-line data (e.g.
+      McCaffrey's rush yards came out right-skewed, ~73 vs a ~65.5 line), a good sanity check that the tail math
+      is reading the curve correctly. Verified live: McCaffrey's Player detail page shows the boom callout's
+      expected value as 73.4 yds, matching the visible Rushing Yards market breakdown (73.39 yds) exactly, and
+      matching this plan's own note about the real number from when 3B.10 was built.
 
 ---
 
@@ -382,3 +450,73 @@ a cheap **daily** headline pull (feeds the Phase 3B trend chart) and the fuller 
   verified: (1) Blended moved to the first result row instead of last, (2) the entire column of the player with
   the higher Blended score is now tinted rather than only bolding per-metric winners, (3) the Injury table row
   was replaced with a hoverable callout badge under the player's name.
+- 2026-07-30 — 2.5 About/Methodology written and confirmed. Explains why blending beats trusting one source, the
+  three inputs, and a 4-step walkthrough of the math (with real half-PPR rates). The worked example is computed
+  live server-side (this week's #1 blended-score player, via the same `_player_rows()` helper as
+  Dashboard/Compare) rather than hardcoded, so it's provably real data, verified by clicking through to that
+  player's own page and confirming the numbers match exactly. Owner feedback applied after first draft: dropped
+  the "what this site intentionally doesn't do" section (no reason to include it), and going forward, no em
+  dashes anywhere on the site or in this doc.
+- 2026-07-30 — Started Phase 3. Owner provided a FantasyPros API key; added to `.env`, confirmed
+  `FANTASYPROS_API_KEY` loads correctly. Live test call succeeded but surfaced a real blocker: this key is
+  FantasyPros' free tier, which always returns Week 1 preseason rankings regardless of the requested week
+  (confirmed with three different week/year combinations, all returned identical Week 1 data, response includes
+  `"tier": "free"` and `"public_api_limited": true`). That means it can't supply real Week 15 2025 rankings to
+  pair with the demo dataset, or real per-week rankings once the season starts. Matches the cost note already in
+  the brief: full weekly access needs the paid MVP/HOF membership (~$6-13/mo). Owner is upgrading later today;
+  3.3-3.5 (wiring the sync into `/refresh`, populating `ExpertRank`, verifying end to end) are paused until the
+  upgrade goes through.
+- 2026-07-30 — Owner asked whether 3B.10 (the per-threshold trend chart) had already been built, since they
+  remembered a trendline draft. It had (2026-07-29), but the checkbox was never flipped to done, a
+  documentation gap, now fixed. While confirming, owner asked for one more improvement: the "not enough history
+  yet" hover state used to be plain text only; now it shows the same chart frame grayed out with the message
+  overlaid on top (new `_placeholder_sparkline_svg()`, a generic squiggle with no real numbers behind it), so it
+  previews the shape of the real chart. Verified via the rendered tooltip HTML on Joe Burrow's Passing TDs
+  market. 3B.10 checked off; 3B.1-3B.9 (the separate headline-score sparkline, needs a new `PredictionSnapshot`
+  table) remain unbuilt.
+- 2026-07-30 — Owner flagged the new placeholder chart was too small to see and asked for a real mockup: larger,
+  with an x-axis of the preceding 5 dates and a y-axis of percentages scaled to the actual data, not a fixed
+  0-100% range. Rebuilt `_placeholder_sparkline_svg()`: now 280x132 (up from a small unlabeled squiggle), draws
+  real axis lines, gridlines, and tick labels, uses the real last-5-calendar-day dates ending today on the
+  x-axis, and scales the y-axis tightly around this threshold's actual current probability (the one real data
+  point available) with headroom, same approach the real chart already uses for its own range. Only the final
+  point is real; the four before it are a deterministic illustrative wiggle, not real history. Verified via the
+  rendered SVG markup and screenshot on Joe Burrow's Passing TDs 0.5 threshold: axis showed 87%/93%/98% and
+  Jul 26-Jul 30, with the real 94.1% value landing correctly on the last point. Flagged as a follow-up: the real
+  chart (once actual history accumulates) still uses the older small style, so it won't match this mockup until
+  updated too.
+- 2026-07-30 — Closed that follow-up same day: refactored `_sparkline_svg()` (the real chart) and
+  `_placeholder_sparkline_svg()` (the mockup) to share one renderer, `_trend_chart_svg()`, so both draw identical
+  real axes/gridlines/sizing; only the mockup gets dimmed and gets the message overlay. The shared renderer also
+  thins x-axis labels to at most 5 so real history won't clutter the axis once a player has many days of data
+  in-season. Removed the now-unused `.spark-label` CSS rule (the old corner-label style it replaced). Verified
+  the real-chart path specifically by temporarily inserting 3 synthetic `ThresholdSnapshot` rows for Joe Burrow's
+  Passing TDs 0.5 threshold, confirming the full-brightness chart rendered correctly with real axes, then
+  deleting the test rows.
+- 2026-07-30 — 2.6 closed out: owner is happy using the favicon built earlier (paused mid-session, then
+  confirmed later) as-is for now, may revisit the design later. Re-verified `/static/favicon.svg` still serves
+  correctly (200, `image/svg+xml`) after several dev-server restarts. All of Phase 2 is now done.
+- 2026-07-30 — Built the rest of Phase 3B (the headline-score trend feature, distinct from 3B.10's per-threshold
+  percentages): added `PredictionSnapshot` (player, week, dfs_pts, betting_pts, blended, day) and
+  `capture_prediction_snapshots(db, week)`, wired into `/refresh` next to the threshold-snapshot capture, reads
+  already-fetched data so it costs no extra API credits. Generalized `_trend_chart_svg()` (built for 3B.10) to
+  support a points-based y-axis (not just percentages) via a `value_fmt`/`max_value` param, and added a matching
+  placeholder-mockup function for points. Player detail now has a chart card (Blended/DFS Projection/Sportsbook
+  Projection tabs, Alpine `x-show` toggle, real axes, larger than the tooltip charts since it's inline on the
+  page) right under the summary numbers. Dashboard rows got a tiny axis-free sparkline next to the Blended
+  number (`_mini_sparkline_svg()`), falling back to "—" when a player has no history. Verified end-to-end with
+  temporary synthetic `PredictionSnapshot` rows (Joe Burrow for the Player detail chart and tab-switching, Josh
+  Allen/McCaffrey for the Dashboard sparklines), confirmed real charts render correctly, then deleted the test
+  rows. 3B.1/3B.2/3B.4/3B.5/3B.6/3B.7 checked off; 3B.3/3B.8/3B.9 are really about Phase 7's live pull cadence
+  and stay open until that phase is built.
+- 2026-07-30 — Built Phase 3C (boom-potential/ceiling indicator). Chose a relative 30% margin over the market's
+  own expected value (`BOOM_MARGIN = 0.30`) rather than a fixed yardage number, read via a new
+  `_interpolate_survival()` helper on the same alternate-line curve `blend.py` already builds, scoped to each
+  position's single main stat (pass_yds/rush_yds/reception_yds). Dashboard flags the top quartile *within each
+  position* (not a fixed cutoff) with a 🚀 badge next to the player's name (hover tooltip has the real number);
+  Player detail shows a full sentence callout with the real target/expected values. Players without a rich
+  enough curve are simply left out, never shown a fake number. Verified two ways: (1) the known McCaffrey
+  example from 3B.10's build notes, his Player detail page shows a 73.4 yds expected rushing total, matching
+  both this plan's earlier note (~73 vs a ~65.5 line) and the visible Rushing Yards market breakdown (73.39 yds)
+  exactly; (2) a direct query confirmed 48 players flagged high-ceiling across QB/RB/WR/TE with sensible
+  20-32% probabilities. 3C.1/3C.2/3C.3/3C.4/3C.5/3C.7 checked off; 3C.6 (optional floor/bust mirror) not built.

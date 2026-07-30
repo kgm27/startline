@@ -48,8 +48,8 @@ class OddsProp(Base):
 
 
 class ThresholdSnapshot(Base):
-    """One day's "Chance of Going Over" reading for one player/stat/threshold
-    — written each time a refresh pulls fresh odds, so the Player detail page
+    """One day's "Chance of Going Over" reading for one player/stat/threshold,
+    written each time a refresh pulls fresh odds, so the Player detail page
     can eventually chart how that probability moved over the week. One row
     per (player, week, stat, threshold, day): a same-day refresh updates the
     existing row rather than piling up duplicates."""
@@ -61,6 +61,25 @@ class ThresholdSnapshot(Base):
     stat = Column(String)  # e.g. "rush_yds", matches blend.py's MARKET_TO_STAT values
     threshold = Column(Float)
     probability = Column(Float)  # pooled "Chance of Going Over" at capture time, 0-1
+    snapshot_date = Column(Date, index=True)  # calendar day this reading was captured
+    updated_at = Column(DateTime)
+
+
+class PredictionSnapshot(Base):
+    """One day's headline numbers (DFS Projection, Sportsbook Projection,
+    Blended score) for one player/week, written each time a refresh pulls
+    fresh data, so the Dashboard and Player detail pages can chart how the
+    top-level numbers moved leading up to kickoff. One row per (player,
+    week, day): a same-day refresh updates the existing row rather than
+    piling up duplicates, same pattern as ThresholdSnapshot."""
+    __tablename__ = "prediction_snapshots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    player_id = Column(String, index=True)
+    week = Column(Integer, index=True)
+    dfs_pts = Column(Float)
+    betting_pts = Column(Float)
+    blended = Column(Float)
     snapshot_date = Column(Date, index=True)  # calendar day this reading was captured
     updated_at = Column(DateTime)
 

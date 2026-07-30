@@ -63,6 +63,42 @@
         {% endif %}
     </section>
 
+    {% if headline_trend %}
+    <section class="trend-card">
+        <div class="trend-tabs">
+            {% for key, t in headline_trend.items() %}
+            <button type="button" class="pill" :class="{active: trendMetric === {{ key | tojson }}}"
+                    @click="trendMetric = {{ key | tojson }}">{{ t.label }}</button>
+            {% endfor %}
+        </div>
+        <div class="trend-chart-wrap">
+            {% for key, t in headline_trend.items() %}
+            <div x-show="trendMetric === {{ key | tojson }}" x-cloak
+                 {% if t.is_placeholder %}class="sparkline-pending"{% endif %}>
+                {{ t.svg | safe }}
+                {% if t.is_placeholder %}
+                <div class="sparkline-pending-message">Trend data starts updating about a week before kickoff,
+                    once lines are posted for this week's games. Check back closer to game time.</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if boom %}
+    <div class="boom-callout">
+        <span class="boom-badge-lg">🚀</span>
+        {% if boom.probability is not none %}
+        <p>{{ (boom.probability * 100) | round | int }}% chance of topping {{ boom.target }} {{ boom.unit }} for
+            {{ boom.label }} ({{ boom.margin_pct }}% above the market's projected {{ boom.expected }} {{ boom.unit }}).
+            Boom potential is context, not part of the blended score.</p>
+        {% else %}
+        <p>Not enough alternate-line data yet to estimate boom potential for {{ boom.label }}.</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
     <h2 id="dfs-projections">DFS Projections</h2>
     {% if dfs_rows %}
     <div class="table-card">
@@ -174,8 +210,11 @@
 </div>
 
 <script>
+    const HEADLINE_TREND = {{ headline_trend_json | safe }};
+
     function playerDetail() {
         return {
+            trendMetric: Object.keys(HEADLINE_TREND)[0] || null,
             tooltipVisible: false,
             tooltipText: '',
             tooltipX: 0,

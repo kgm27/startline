@@ -206,7 +206,7 @@ body {
     position: fixed;
     transform: translateX(-50%);
     width: max-content;
-    max-width: 300px;
+    max-width: 320px;
     background: var(--color-text);
     color: #fff;
     font-size: 0.75rem;
@@ -429,6 +429,81 @@ a.btn, a.btn-primary {
     .hero-title { font-size: 1.85rem; }
 }
 
+/* ---------- About / Methodology page ---------- */
+
+.prose {
+    max-width: 760px;
+    margin: 0 auto;
+}
+
+.prose p {
+    color: var(--color-text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.7;
+    margin: 0 0 1rem;
+}
+
+.prose h2 {
+    margin: 2.5rem 0 0.5rem;
+    font-size: 1.05rem;
+    text-transform: none;
+    letter-spacing: -0.005em;
+    color: var(--color-text);
+}
+
+.prose h2:first-child { margin-top: 0; }
+
+.method-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin: 1rem 0 1.5rem;
+}
+
+.method-step {
+    display: flex;
+    gap: 0.9rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 1.1rem 1.3rem;
+}
+
+.method-step-num {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    background: var(--color-accent-light);
+    color: var(--color-accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 0.85rem;
+}
+
+.method-step-body h3 {
+    margin: 0 0 0.3rem;
+    font-size: 0.9rem;
+}
+
+.method-step-body p {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+
+.example-callout {
+    margin-top: 0.75rem;
+}
+
+.example-callout .summary-box { margin-bottom: 0.6rem; }
+
+.example-callout .note { font-size: 0.8rem; }
+
 /* ---------- Notices ---------- */
 
 .notice, .note-banner {
@@ -449,6 +524,22 @@ a.btn, a.btn-primary {
     border: 1px solid #c7d2fe;
     color: #3730a3;
 }
+
+.boom-callout {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    background: var(--color-accent-light);
+    border: 1px solid #c7d2fe;
+    border-radius: var(--radius-md);
+    padding: 0.7rem 1rem;
+    margin: 0 0 1.5rem;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: #3730a3;
+}
+.boom-callout p { margin: 0; }
+.boom-badge-lg { font-size: 1.3rem; flex-shrink: 0; line-height: 1.4; }
 
 /* ---------- Stat summary cards ---------- */
 
@@ -591,6 +682,13 @@ tbody tr:last-child td { border-bottom: none; }
 td.player-cell { white-space: normal; min-width: 140px; }
 .player-name { font-weight: 600; }
 
+.boom-badge {
+    margin-left: 0.35rem;
+    cursor: help;
+    border-bottom: none;
+    font-size: 0.85em;
+}
+
 .blended-link {
     color: var(--color-text);
     text-decoration: none;
@@ -598,6 +696,19 @@ td.player-cell { white-space: normal; min-width: 140px; }
     border-bottom: 1px dashed var(--color-text-tertiary);
 }
 .blended-link:hover { color: var(--color-accent); border-bottom-color: var(--color-accent); }
+
+.row-trend {
+    display: inline-flex;
+    vertical-align: middle;
+    margin-left: 0.5rem;
+}
+.row-trend .mini-sparkline { display: block; overflow: visible; color: var(--color-accent); }
+.row-trend-empty {
+    display: inline-block;
+    margin-left: 0.5rem;
+    color: var(--color-text-tertiary);
+    font-size: 0.72rem;
+}
 
 .note {
     font-size: 0.72rem;
@@ -643,6 +754,44 @@ a.summary-value {
     width: fit-content;
     cursor: pointer;
 }
+
+.trend-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 1rem 1.2rem 0.5rem;
+    margin: 0 0 1.5rem;
+}
+
+.trend-tabs {
+    display: flex;
+    gap: 0.35rem;
+    margin-bottom: 0.5rem;
+}
+
+.trend-chart-wrap { position: relative; }
+
+/* The chart-drawing functions in main.py are shared with the per-threshold
+   hover tooltips, which render on the tooltip's dark background — override
+   to light-theme colors here since this chart sits inline on a normal
+   card. */
+.trend-card .sparkline {
+    display: block;
+    overflow: visible;
+    width: 100%;
+    height: auto;
+    color: var(--color-accent);
+}
+.trend-card .spark-axis-label { fill: var(--color-text-tertiary); }
+.trend-card .spark-axis-line { stroke: var(--color-border); }
+.trend-card .spark-gridline { stroke: var(--color-border-light); }
+.trend-card .sparkline-pending .sparkline-placeholder { color: var(--color-text-tertiary); opacity: 0.5; }
+.trend-card .sparkline-pending-message {
+    color: var(--color-text-secondary);
+    font-size: 0.78rem;
+    background: rgba(255, 255, 255, 0.82);
+}
 a.summary-value:hover { color: var(--color-accent); border-bottom-color: var(--color-accent); }
 
 h2 {
@@ -685,10 +834,45 @@ h3 {
     overflow: visible;
 }
 
-.global-tooltip .spark-label {
+.spark-axis-label {
     font-size: 9px;
     font-family: var(--font-sans);
-    fill: rgba(255, 255, 255, 0.55);
+    fill: rgba(255, 255, 255, 0.5);
+}
+
+.spark-axis-line {
+    stroke: rgba(255, 255, 255, 0.35);
+    stroke-width: 1;
+}
+
+.spark-gridline {
+    stroke: rgba(255, 255, 255, 0.12);
+    stroke-width: 1;
+}
+
+/* Before there's enough history to chart, show the same-shaped chart
+   frame grayed out (so the "coming soon" state has the same footprint as
+   the real one) with the explanation overlaid on top rather than as bare
+   text. */
+.sparkline-pending {
+    position: relative;
+}
+
+.sparkline-pending .sparkline-placeholder {
+    color: rgba(255, 255, 255, 0.25);
+}
+
+.sparkline-pending-message {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 0.2rem 0.9rem;
+    font-size: 0.68rem;
+    line-height: 1.35;
+    color: rgba(255, 255, 255, 0.85);
 }
 
 table.dfs-table td { white-space: normal; }

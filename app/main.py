@@ -1,7 +1,7 @@
 """FastAPI app: the dashboard page plus a manual "refresh data" action."""
 import json
 import os
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse
@@ -10,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.db import Base, engine, get_db
-from app.models import Player, DfsProjection, OddsProp, ExpertRank, ThresholdSnapshot
+from app.models import Player, DfsProjection, OddsProp, ExpertRank, ThresholdSnapshot, PredictionSnapshot
 from app.config import get_settings
 from app.data_sources.sleeper import sync_players, fetch_current_week
 from app.data_sources.odds_api import sync_odds, DFS_SOURCE_LABELS
@@ -45,6 +45,7 @@ templates = Jinja2Templates(directory="app/templates")
 # string changes whenever the file's contents change, forcing a fresh fetch.
 templates.env.globals["style_version"] = str(int(os.path.getmtime("app/static/style.css")))
 templates.env.globals["app_js_version"] = str(int(os.path.getmtime("app/static/app.js")))
+templates.env.globals["favicon_version"] = str(int(os.path.getmtime("app/static/favicon.svg")))
 templates.env.filters["tojson"] = json.dumps
 
 STAT_LABELS = {
@@ -109,6 +110,66 @@ METHOD_INFO = {
 }
 
 
+# Phase 3C: "boom potential", how much upside a player's main stat carries
+# beyond what the market expects, read straight off the same alternate-line
+# survival curve blend.py already builds for expected-value math. Margin is
+# RELATIVE (not a fixed yardage number) so it means the same thing across
+# very different stat scales (pass yards vs. reception yards). This never
+# changes the blended score; it's a tiebreaker/context signal only, shown
+# as a badge alongside the number.
+MAIN_STAT_BY_POSITION = {
+    "QB": "pass_yds",
+    "RB": "rush_yds",
+    "WR": "reception_yds",
+    "TE": "reception_yds",
+}
+BOOM_MARGIN = 0.30  # "boom" = beating the market's own expectation by 30%+
+
+
+def _interpolate_survival(curve, x):
+    """Linear interpolation of a survival curve {threshold: P(X > threshold)}
+    at an arbitrary point x, using the two nearest quoted thresholds.
+    Returns None when x falls outside the curve's quoted range: there's no
+    responsible way to extrapolate a probability past the highest line a
+    book was willing to quote, so boom potential shows "n/a" rather than a
+    guess in that case."""
+    thresholds = sorted(curve.keys())
+    if not thresholds or x < thresholds[0] or x > thresholds[-1]:
+        return None
+    if x in curve:
+        return curve[x]
+    for lo, hi in zip(thresholds, thresholds[1:]):
+        if lo <= x <= hi:
+            p_lo, p_hi = curve[lo], curve[hi]
+            frac = (x - lo) / (hi - lo)
+            return p_lo + (p_hi - p_lo) * frac
+    return None
+
+
+def _main_stat_curve(props, stat):
+    """Pools and anchors the survival curve for one stat from a player's raw
+    props, same gate (MIN_THRESHOLDS_FOR_CURVE) betting_derived_points()
+    uses elsewhere, so boom potential is only ever computed from curves rich
+    enough to trust. Returns (curve, expected) or (None, None)."""
+    stat_props = [p for p in props if MARKET_TO_STAT.get(p.market) == stat]
+    curve = _pooled_survival_curve(stat_props)
+    if not curve or len(curve) < MIN_THRESHOLDS_FOR_CURVE:
+        return None, None
+    curve = _apply_stat_anchors(curve, stat)
+    expected = _trapezoidal_expectation(curve)
+    return curve, expected
+
+
+def _boom_probability(curve, expected):
+    """Given an already-anchored survival curve and its expected value, the
+    probability of beating that expectation by BOOM_MARGIN or more. Returns
+    None when there isn't enough range in the curve to responsibly answer
+    (see _interpolate_survival), shown as "n/a", never a fake 0."""
+    if not curve or not expected:
+        return None
+    return _interpolate_survival(curve, expected * (1 + BOOM_MARGIN))
+
+
 def _resolve_week(db, requested_week):
     """Picks which week to show. An explicit ?week= is always honored as-is.
     Otherwise: try the real current NFL week; if that week has no data yet
@@ -162,43 +223,168 @@ def _thin_thresholds(items, min_gap=5):
     return kept
 
 
-def _sparkline_svg(history, width=220, height=64):
-    """A threshold's "Chance of Going Over" trend line, sized for a hover
-    tooltip (not an inline table cell) so it can carry real labels — the
-    date range and percentage range printed right on the chart — instead of
-    being a bare, unlabeled shape. `history` is [(date, probability), ...]
-    oldest first. Returns "" when there isn't enough history yet (the
-    caller shows a "not ready" message instead)."""
-    if len(history) < 2:
-        return ""
-    dates = [d for d, _ in history]
-    values = [p for _, p in history]
-    lo, hi = min(values), max(values)
-    span = hi - lo or 0.01
-    n = len(values)
+def _trend_chart_svg(points, width=280, height=132, css_class="sparkline", value_fmt=None, max_value=None):
+    """Shared renderer for both the real trend chart (once real history
+    exists) and the illustrative placeholder mockup (before it does), so a
+    preview looks exactly like the real thing. `points` is
+    [(date_label, value), ...], oldest first, at least 2 entries. The
+    y-axis is always scaled tightly around the data's own range (with some
+    headroom) rather than a fixed range — the same "let the real numbers
+    set the scale" approach used throughout this app. `value_fmt` controls
+    how a raw value is printed on the axis (defaults to a 0-1 probability
+    as a percentage); `max_value` optionally caps the top of the range
+    (e.g. 1.0 for a probability, left uncapped for a points total). X-axis
+    tick labels are thinned to at most 5 so dates don't overlap once real
+    history grows past a handful of days; the line and dots still plot
+    every point regardless."""
+    value_fmt = value_fmt or (lambda v: f"{v * 100:.0f}%")
+    values = [v for _, v in points]
+    labels = [l for l, _ in points]
+    n = len(points)
 
-    pad_left, pad_right, pad_top, pad_bottom = 4, 4, 14, 16
+    lo, hi = min(values), max(values)
+    span = (hi - lo) or 0.02
+    headroom = span * 0.25
+    lo, hi = max(lo - headroom, 0.0), hi + headroom
+    if max_value is not None:
+        hi = min(hi, max_value)
+    span = hi - lo or 0.02
+
+    pad_left, pad_right, pad_top, pad_bottom = 34, 10, 10, 22
     chart_w = width - pad_left - pad_right
     chart_h = height - pad_top - pad_bottom
 
-    points = []
-    for i, v in enumerate(values):
-        x = pad_left + (i / (n - 1)) * chart_w
+    def xy(i, v):
+        x = pad_left + (i / (n - 1)) * chart_w if n > 1 else pad_left
         y = pad_top + chart_h - ((v - lo) / span) * chart_h
-        points.append(f"{x:.1f},{y:.1f}")
-    path = " ".join(points)
+        return x, y
 
-    range_label = f"{lo * 100:.0f}–{hi * 100:.0f}%"
-    first_label = dates[0].strftime("%b %-d")
-    last_label = dates[-1].strftime("%b %-d")
+    coords = [xy(i, v) for i, v in enumerate(values)]
+    path = " ".join(f"{x:.1f},{y:.1f}" for x, y in coords)
+    dots = "".join(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.5"/>' for x, y in coords)
+
+    y_ticks = sorted({hi, (lo + hi) / 2, lo}, reverse=True)
+    y_axis = "".join(
+        f'<text x="{pad_left - 6}" y="{pad_top + chart_h - ((v - lo) / span) * chart_h + 3:.1f}" '
+        f'text-anchor="end" class="spark-axis-label">{value_fmt(v)}</text>'
+        f'<line x1="{pad_left}" y1="{pad_top + chart_h - ((v - lo) / span) * chart_h:.1f}" '
+        f'x2="{width - pad_right}" y2="{pad_top + chart_h - ((v - lo) / span) * chart_h:.1f}" '
+        f'class="spark-gridline"/>'
+        for v in y_ticks
+    )
+
+    max_labels = 5
+    if n <= max_labels:
+        label_idx = list(range(n))
+    else:
+        step = (n - 1) / (max_labels - 1)
+        label_idx = sorted({round(i * step) for i in range(max_labels)})
+    x_axis = "".join(
+        f'<text x="{coords[i][0]:.1f}" y="{height - 5}" text-anchor="middle" class="spark-axis-label">'
+        f"{labels[i]}</text>"
+        for i in label_idx
+    )
 
     return (
-        f'<svg class="sparkline" viewBox="0 0 {width} {height}" width="{width}" height="{height}">'
+        f'<svg class="{css_class}" viewBox="0 0 {width} {height}" width="{width}" height="{height}">'
+        f"{y_axis}"
+        f'<line x1="{pad_left}" y1="{pad_top}" x2="{pad_left}" y2="{height - pad_bottom}" class="spark-axis-line"/>'
         f'<polyline points="{path}" fill="none" stroke="currentColor" stroke-width="2" '
         f'stroke-linecap="round" stroke-linejoin="round"/>'
-        f'<text x="{width - pad_right}" y="10" text-anchor="end" class="spark-label">{range_label}</text>'
-        f'<text x="{pad_left}" y="{height - 3}" class="spark-label">{first_label}</text>'
-        f'<text x="{width - pad_right}" y="{height - 3}" text-anchor="end" class="spark-label">{last_label}</text>'
+        f'<g fill="currentColor">{dots}</g>'
+        f"{x_axis}"
+        f"</svg>"
+    )
+
+
+def _sparkline_svg(history):
+    """A threshold's "Chance of Going Over" trend line, once there's real
+    history to plot. `history` is [(date, probability), ...] oldest first.
+    Returns "" when there isn't enough history yet (the caller shows the
+    placeholder mockup instead)."""
+    if len(history) < 2:
+        return ""
+    points = [(d.strftime("%b %-d"), p) for d, p in history]
+    return _trend_chart_svg(points, css_class="sparkline", max_value=1.0)
+
+
+def _placeholder_sparkline_svg(current_probability):
+    """A mockup of the real trend chart, shown grayed out before there's
+    enough history to plot one. Uses the real last-5-calendar-day dates on
+    the x-axis and a y-axis scaled tightly around this threshold's actual
+    current probability (the one real data point that already exists).
+    The four earlier points are a plausible, deterministic wiggle around
+    that real value, not real history: this is a preview of the shape, not
+    a claim about what those days actually looked like, which is also why
+    it's kept visually dimmed with the "not enough history yet" message
+    layered on top rather than presented as if it were live data."""
+    today = date.today()
+    dates = [today - timedelta(days=i) for i in range(4, -1, -1)]
+    # deterministic, illustrative offsets from the real value, oldest first;
+    # the final offset is 0 so day 5 (today) always equals the real number
+    offsets = [-0.05, 0.02, -0.035, 0.015, 0.0]
+    values = [min(max(current_probability + o, 0.01), 0.99) for o in offsets]
+    points = [(d.strftime("%b %-d"), v) for d, v in zip(dates, values)]
+    return _trend_chart_svg(points, css_class="sparkline sparkline-placeholder", max_value=1.0)
+
+
+def _prediction_trend_svg(history, width=560, height=170):
+    """A headline number's (DFS/Sportsbook/Blended) trend line in fantasy
+    points, once there's real history to plot. `history` is
+    [(date, points), ...] oldest first. Returns "" when there isn't enough
+    history yet (the caller shows the placeholder mockup instead). Sized
+    larger than the per-threshold tooltip charts by default since this one
+    renders inline on the page, not squeezed into a hover bubble."""
+    if len(history) < 2:
+        return ""
+    points = [(d.strftime("%b %-d"), v) for d, v in history]
+    return _trend_chart_svg(points, width=width, height=height, css_class="sparkline", value_fmt=lambda v: f"{v:.1f}")
+
+
+def _placeholder_prediction_trend_svg(current_value, width=560, height=170):
+    """A mockup of the headline-number trend chart, shown grayed out before
+    there's enough history to plot one. Same approach as
+    _placeholder_sparkline_svg() (real recent dates, real current value
+    anchoring the last point, a deterministic illustrative wiggle for the
+    rest) but for a fantasy-points total instead of a 0-1 probability, so
+    the wiggle is a proportion of the real value rather than a fixed
+    percentage-point offset."""
+    today = date.today()
+    dates = [today - timedelta(days=i) for i in range(4, -1, -1)]
+    offset_pct = [-0.06, 0.03, -0.045, 0.02, 0.0]
+    values = [max(current_value * (1 + o), 0.0) for o in offset_pct]
+    points = [(d.strftime("%b %-d"), v) for d, v in zip(dates, values)]
+    return _trend_chart_svg(
+        points, width=width, height=height, css_class="sparkline sparkline-placeholder",
+        value_fmt=lambda v: f"{v:.1f}",
+    )
+
+
+def _mini_sparkline_svg(history, width=64, height=22):
+    """A tiny, axis-free line for inline use in a Dashboard table cell —
+    the Player detail page's tooltip charts are too large to fit inline in
+    a row, so this is a deliberately bare shape (no labels, no ticks) that
+    just shows the direction of movement at a glance. `history` is
+    [(date, points), ...] oldest first. Returns "" when there isn't enough
+    history to plot (the caller shows a plain dash instead of an empty
+    chart, unlike the Player detail page's larger hover mockups)."""
+    if len(history) < 2:
+        return ""
+    values = [v for _, v in history]
+    lo, hi = min(values), max(values)
+    span = (hi - lo) or max(abs(hi), 1) * 0.05
+    n = len(values)
+    pad = 2
+    chart_w, chart_h = width - pad * 2, height - pad * 2
+    coords = [
+        (pad + (i / (n - 1)) * chart_w, pad + chart_h - ((v - lo) / span) * chart_h)
+        for i, v in enumerate(values)
+    ]
+    path = " ".join(f"{x:.1f},{y:.1f}" for x, y in coords)
+    return (
+        f'<svg class="mini-sparkline" viewBox="0 0 {width} {height}" width="{width}" height="{height}">'
+        f'<polyline points="{path}" fill="none" stroke="currentColor" stroke-width="1.75" '
+        f'stroke-linecap="round" stroke-linejoin="round"/>'
         f"</svg>"
     )
 
@@ -209,7 +395,7 @@ def landing(request: Request):
 
 
 def _player_rows(db, week, scoring):
-    """Every player's headline numbers for a given week — the shared dataset
+    """Every player's headline numbers for a given week: the shared dataset
     behind both the Dashboard table and the Comparison picker, so the two
     pages can never show different numbers for the same player/week."""
     rows = []
@@ -227,6 +413,12 @@ def _player_rows(db, week, scoring):
 
         expert_persp = expert_perspective(player.position, expert.position_rank if expert else None)
 
+        boom_stat = MAIN_STAT_BY_POSITION.get(player.position)
+        boom_prob = None
+        if boom_stat:
+            boom_curve, boom_expected = _main_stat_curve(props, boom_stat)
+            boom_prob = _boom_probability(boom_curve, boom_expected)
+
         rows.append({
             "id": player.id,
             "name": player.name,
@@ -237,7 +429,39 @@ def _player_rows(db, week, scoring):
             "betting_pts": betting_pts,
             "blended": blended,
             "expert": expert_persp.label if expert_persp else None,
+            "boom_stat": boom_stat,
+            "boom_prob": boom_prob,
         })
+
+    # "High ceiling" flag: top quartile of boom_prob within each position,
+    # not a fixed cutoff — what counts as unusual upside is relative to
+    # that week's own market data, and a fixed number would drift in
+    # meaning as the underlying odds/margin math gets refined later.
+    # Skipped for a position entirely when too few players have a real
+    # boom_prob to rank meaningfully (e.g. only one game has alternate
+    # lines pulled so far).
+    by_position = {}
+    for r in rows:
+        if r["boom_prob"] is not None:
+            by_position.setdefault(r["position"], []).append(r["boom_prob"])
+    boom_cutoff = {}
+    for pos, vals in by_position.items():
+        if len(vals) < 4:
+            continue
+        vals_sorted = sorted(vals)
+        idx = min(len(vals_sorted) - 1, int(len(vals_sorted) * 0.75))
+        boom_cutoff[pos] = vals_sorted[idx]
+
+    for r in rows:
+        cutoff = boom_cutoff.get(r["position"])
+        r["boom_flag"] = r["boom_prob"] is not None and cutoff is not None and r["boom_prob"] >= cutoff
+        r["boom_tooltip"] = None
+        if r["boom_flag"]:
+            stat_label = STAT_LABELS.get(r["boom_stat"], r["boom_stat"])
+            r["boom_tooltip"] = (
+                f"High ceiling: {r['boom_prob'] * 100:.0f}% chance of beating the market's expected "
+                f"{stat_label.lower()} by {BOOM_MARGIN * 100:.0f}% or more."
+            )
 
     rows.sort(key=lambda r: r["blended"], reverse=True)
     return rows
@@ -254,6 +478,20 @@ def dashboard(request: Request, week: int = None, position: str = None, note: st
     # for a snappy no-reload experience, so this always loads every position —
     # `position` is only used to seed which pill starts active.
     rows = _player_rows(db, week, scoring)
+
+    # Tiny inline Blended-score trend sparkline per row (Phase 3B.4). One
+    # bulk query for the whole week rather than one per player/row.
+    snapshots_by_player = {}
+    for snap in (
+        db.query(PredictionSnapshot)
+        .filter_by(week=week)
+        .order_by(PredictionSnapshot.snapshot_date)
+        .all()
+    ):
+        if snap.blended is not None:
+            snapshots_by_player.setdefault(snap.player_id, []).append((snap.snapshot_date, snap.blended))
+    for row in rows:
+        row["trend_svg"] = _mini_sparkline_svg(snapshots_by_player.get(row["id"], []))
 
     summary = {
         "total": len(rows),
@@ -306,8 +544,26 @@ def compare(request: Request, week: int = None, a: str = None, b: str = None, db
 
 
 @app.get("/about")
-def about(request: Request):
-    return templates.TemplateResponse("about.html", {"request": request, "active_page": "about"})
+def about(request: Request, db: Session = Depends(get_db)):
+    settings = get_settings()
+    week, is_demo_week = _resolve_week(db, None)
+    scoring = SCORING_RULES.get(settings.scoring_format, SCORING_RULES["half_ppr"])
+
+    # A real, live worked example beats a made-up one — this week's #1
+    # blended score, whoever that happens to be, so the walkthrough below
+    # always points at genuine (not fabricated) numbers a reader can click
+    # into and verify on that player's own page.
+    rows = _player_rows(db, week, scoring)
+    example = rows[0] if rows else None
+
+    return templates.TemplateResponse("about.html", {
+        "request": request,
+        "week": week,
+        "is_demo_week": is_demo_week,
+        "example": example,
+        "scoring": scoring,
+        "active_page": "about",
+    })
 
 
 @app.get("/player/{player_id}")
@@ -354,6 +610,12 @@ def player_detail(request: Request, player_id: str, week: int = None, db: Sessio
             continue
         props_by_stat.setdefault(stat, []).append(prop)
 
+    # Boom potential (Phase 3C): computed inline in this same loop, reusing
+    # the curve/expected_count already built for the player's main stat
+    # rather than pooling the props a second time.
+    main_stat = MAIN_STAT_BY_POSITION.get(player.position)
+    boom = None
+
     stats = []
     for stat, stat_props in props_by_stat.items():
         rate = getattr(scoring, STAT_TO_RULE[stat])
@@ -371,6 +633,16 @@ def player_detail(request: Request, player_id: str, week: int = None, db: Sessio
                 _discrete_tail_sum(curve) if stat in DISCRETE_COUNT_STATS
                 else _trapezoidal_expectation(curve)
             )
+            if stat == main_stat:
+                boom = {
+                    "stat": stat,
+                    "label": STAT_LABELS.get(stat, stat),
+                    "unit": STAT_UNITS.get(stat, ""),
+                    "expected": round(expected_count, 1),
+                    "target": round(expected_count * (1 + BOOM_MARGIN), 1),
+                    "margin_pct": round(BOOM_MARGIN * 100),
+                    "probability": _boom_probability(curve, expected_count),
+                }
             # for display: each threshold, its pooled probability, and which
             # books quoted it (0 + "assumed" for the receptions first-catch
             # anchor, which isn't from any real book)
@@ -405,16 +677,25 @@ def player_detail(request: Request, player_id: str, week: int = None, db: Sessio
             thresholds = []
             for t, p in display_items:
                 history = history_by_stat_threshold.get((stat, t), [])
-                # every threshold's percentage is hoverable — either the real
+                # every threshold's percentage is hoverable: either the real
                 # date-by-date table once there's history, or a plain-language
                 # explanation of when that history will start existing
                 svg = _sparkline_svg(history)
-                trend_tooltip = (
-                    f'<div class="tooltip-title">Chance of Going Over — Trend</div>{svg}'
-                    if svg else
-                    "Trend data starts updating about a week before kickoff, once lines are posted "
-                    "for this week's games — check back closer to game time."
-                )
+                if svg:
+                    trend_tooltip = f'<div class="tooltip-title">Chance of Going Over: Trend</div>{svg}'
+                else:
+                    # Not enough history yet: show the same chart frame, grayed
+                    # out, with the explanation overlaid on top rather than as
+                    # bare text, so the "coming soon" state previews the shape
+                    # of the real thing.
+                    placeholder_svg = _placeholder_sparkline_svg(p)
+                    trend_tooltip = (
+                        '<div class="tooltip-title">Chance of Going Over: Trend</div>'
+                        f'<div class="sparkline-pending">{placeholder_svg}'
+                        '<div class="sparkline-pending-message">Trend data starts updating about a week '
+                        "before kickoff, once lines are posted for this week's games. Check back closer "
+                        "to game time.</div></div>"
+                    )
                 thresholds.append({
                     "threshold": t,
                     "probability": round(p, 4),
@@ -481,6 +762,39 @@ def player_detail(request: Request, player_id: str, week: int = None, db: Sessio
             {"label": "Sportsbook Projection", "points": betting_pts},
         ]
 
+    # Headline-score trend chart (Phase 3B): DFS/Sportsbook/Blended over the
+    # days leading up to kickoff, toggleable in the template. Falls back to
+    # a placeholder mockup (anchored to today's real number) for whichever
+    # metric doesn't have 2+ real days of PredictionSnapshot history yet.
+    # Metrics with no current value at all (e.g. no DFS projections this
+    # week) are left out of the toggle entirely rather than showing an
+    # empty chart for a number that doesn't exist.
+    prediction_snapshots = (
+        db.query(PredictionSnapshot)
+        .filter_by(player_id=player.id, week=week)
+        .order_by(PredictionSnapshot.snapshot_date)
+        .all()
+    )
+    headline_trend = {}
+    for key, label, current_value in (
+        ("blended", "Blended", blended),
+        ("dfs_pts", "DFS Projection", dfs_pts),
+        ("betting_pts", "Sportsbook Projection", betting_pts),
+    ):
+        if current_value is None:
+            continue
+        history = [
+            (snap.snapshot_date, getattr(snap, key))
+            for snap in prediction_snapshots
+            if getattr(snap, key) is not None
+        ]
+        svg = _prediction_trend_svg(history)
+        headline_trend[key] = {
+            "label": label,
+            "svg": svg or _placeholder_prediction_trend_svg(current_value),
+            "is_placeholder": not svg,
+        }
+
     return templates.TemplateResponse("player_detail.html", {
         "request": request,
         "player": player,
@@ -495,6 +809,9 @@ def player_detail(request: Request, player_id: str, week: int = None, db: Sessio
         "blended_breakdown": blended_breakdown,
         "blended": blended,
         "expert": expert_persp,
+        "headline_trend": headline_trend,
+        "headline_trend_json": json.dumps(headline_trend),
+        "boom": boom,
         "is_demo_week": is_demo_week,
     })
 
@@ -554,6 +871,56 @@ def capture_threshold_snapshots(db: Session, week: int) -> int:
     return written
 
 
+def capture_prediction_snapshots(db: Session, week: int) -> int:
+    """Writes one PredictionSnapshot row per player with any data for
+    `week`, recording that day's DFS Projection, Sportsbook Projection, and
+    Blended score so the Dashboard and Player detail pages can chart how
+    the headline numbers moved leading up to kickoff. A same-day refresh
+    updates today's row rather than piling up duplicates, same pattern as
+    capture_threshold_snapshots(). Returns rows written/updated."""
+    settings = get_settings()
+    scoring = SCORING_RULES.get(settings.scoring_format, SCORING_RULES["half_ppr"])
+    today = date.today()
+    now = datetime.now(timezone.utc)
+
+    written = 0
+    for player in db.query(Player).all():
+        projections = db.query(DfsProjection).filter_by(player_id=player.id, week=week).all()
+        props = db.query(OddsProp).filter_by(player_id=player.id, week=week).all()
+
+        dfs_pts = dfs_projection_points(projections)
+        betting_pts = betting_derived_points(props, scoring)
+        blended = blend_expected_points(dfs_pts, betting_pts)
+
+        if blended is None:
+            continue  # nothing to snapshot yet for this player/week
+
+        existing = (
+            db.query(PredictionSnapshot)
+            .filter_by(player_id=player.id, week=week, snapshot_date=today)
+            .first()
+        )
+        if existing:
+            existing.dfs_pts = dfs_pts
+            existing.betting_pts = betting_pts
+            existing.blended = blended
+            existing.updated_at = now
+        else:
+            db.add(PredictionSnapshot(
+                player_id=player.id,
+                week=week,
+                dfs_pts=dfs_pts,
+                betting_pts=betting_pts,
+                blended=blended,
+                snapshot_date=today,
+                updated_at=now,
+            ))
+        written += 1
+
+    db.commit()
+    return written
+
+
 @app.post("/refresh")
 def refresh(db: Session = Depends(get_db)):
     """Pulls fresh data from every source that's currently set up.
@@ -576,6 +943,8 @@ def refresh(db: Session = Depends(get_db)):
             week = fetch_current_week()
             snapshot_count = capture_threshold_snapshots(db, week)
             notes.append(f"Captured {snapshot_count} threshold snapshot(s) for the historical % chance charts")
+            prediction_count = capture_prediction_snapshots(db, week)
+            notes.append(f"Captured {prediction_count} headline-score snapshot(s) for the trend charts")
         except Exception as exc:
             notes.append(f"Odds refresh failed: {exc}")
 

@@ -1,15 +1,132 @@
 {% extends "base.html" %}
-{% block title %}About / Methodology — Start/Sit Advisor{% endblock %}
+{% block title %}About / Methodology - Start/Sit Advisor{% endblock %}
 {% block content %}
 <div class="page">
     <header class="topbar">
         <div class="topbar-titles">
             <h1>About / Methodology</h1>
-            <p class="subtitle">How the blended score is built</p>
+            <p class="subtitle">How the blended score is built, and why it exists</p>
         </div>
     </header>
-    <div class="table-card">
-        <p class="empty-state">Coming soon — a plain-language explanation of the DFS + odds + expert blend.</p>
+
+    <div class="prose">
+        <h2>The problem with trusting one source</h2>
+        <p>
+            DFS pick'em sites like Underdog and PrizePicks publish a projected fantasy-point total for every
+            player, every week. Sportsbooks publish betting lines (passing/rushing/receiving yardage props,
+            anytime-touchdown odds, game totals) that imply their own view of how a player will perform.
+            Both are independently pretty good at this. They also don't always agree.
+        </p>
+        <p>
+            When two differently-built systems (one a projections desk, one a real market where people bet
+            real money) land on similar numbers, that agreement is a stronger signal than either alone. When
+            they disagree, that disagreement is informative too: it usually means real uncertainty (a banged-up
+            offensive line, a tough matchup one side is pricing in that the other missed) rather than one side
+            being simply wrong. This site blends the two into a single expected-points number, and keeps a
+            third, independent lens (expert consensus rankings) visible alongside it rather than folded in.
+        </p>
+
+        <h2>Three inputs</h2>
+        <section class="hero-features" style="margin: 1rem 0 1.5rem;">
+            <div class="feature-card">
+                <span class="feature-kicker">DFS Projections</span>
+                <p>Underdog, PrizePicks, and Betr Picks projections, already scored in fantasy points and
+                    averaged together.</p>
+            </div>
+            <div class="feature-card">
+                <span class="feature-kicker">Sportsbook Lines</span>
+                <p>Real player-prop lines and odds from US sportsbooks (via The Odds API), converted into an
+                    expected fantasy-point total using the market's own implied probabilities.</p>
+            </div>
+            <div class="feature-card">
+                <span class="feature-kicker">Expert Rankings</span>
+                <p>FantasyPros' consensus of 100+ analysts, shown as a plain-language perspective, never
+                    averaged into the number itself.</p>
+            </div>
+        </section>
+
+        <h2>How three inputs become one number</h2>
+        <div class="method-steps">
+            <div class="method-step">
+                <div class="method-step-num">1</div>
+                <div class="method-step-body">
+                    <h3>DFS Projection</h3>
+                    <p>Average the projected points across every DFS source that's posted a number for that
+                        player this week.</p>
+                </div>
+            </div>
+            <div class="method-step">
+                <div class="method-step-num">2</div>
+                <div class="method-step-body">
+                    <h3>Sportsbook Projection</h3>
+                    <p>Convert each betting market into points, using your league's scoring rate (half-PPR by
+                        default: 0.04 pts/passing yard, 0.1 pts/rushing or receiving yard, 0.5 pts/reception).
+                        A yardage or reception line becomes an expected-value estimate from the market's own
+                        quoted probabilities at every threshold a book offers, not just the single headline
+                        number. Touchdown odds are converted from betting odds into an implied probability and
+                        multiplied by the points a touchdown is worth. Game total and spread are shown for
+                        context (blowout risk, game script) rather than folded directly into the estimate.</p>
+                </div>
+            </div>
+            <div class="method-step">
+                <div class="method-step-num">3</div>
+                <div class="method-step-body">
+                    <h3>Blended score</h3>
+                    <p>Average the DFS Projection and Sportsbook Projection. If only one side has data for a
+                        player, that side is used on its own rather than showing nothing.</p>
+                </div>
+            </div>
+            <div class="method-step">
+                <div class="method-step-num">4</div>
+                <div class="method-step-body">
+                    <h3>Expert Perspective</h3>
+                    <p>FantasyPros' consensus position rank is translated into a plain label ("Top 12 at
+                        position," "Flex-worthy," or "Bench") and shown next to the blended number, not mixed
+                        into it. Human analysts weigh things (scheme fit, coaching tendencies, locker-room news)
+                        that don't reduce cleanly to a number, so this stays a separate, qualitative check
+                        instead of quietly moving the math.</p>
+                </div>
+            </div>
+        </div>
+
+        {% if example %}
+        <h2>A real example</h2>
+        <p>
+            This week's highest blended score belongs to
+            <a href="/player/{{ example.id }}?week={{ week }}">{{ example.name }}</a> ({{ example.position }} &middot;
+            {{ example.team }}). Here's how that number was built:
+        </p>
+        <div class="example-callout">
+            <section class="summary-box">
+                <div>
+                    <span class="summary-label">DFS Projection</span>
+                    <span class="summary-value">{{ "%.2f"|format(example.dfs_pts) if example.dfs_pts is not none else "—" }}</span>
+                </div>
+                <div>
+                    <span class="summary-label">Sportsbook Projection</span>
+                    <span class="summary-value">{{ "%.2f"|format(example.betting_pts) if example.betting_pts is not none else "—" }}</span>
+                </div>
+                <div>
+                    <span class="summary-label">Blended</span>
+                    <span class="summary-value">{{ "%.2f"|format(example.blended) }}</span>
+                </div>
+            </section>
+            <p class="note">
+                {% if is_demo_week %}From the Week {{ week }}, 2025 demo dataset: a real backtest, not a
+                fabricated example.{% endif %}
+                <a href="/player/{{ example.id }}?week={{ week }}">See the full per-market breakdown &rarr;</a>
+            </p>
+        </div>
+        {% endif %}
+
+        <h2>This is v1</h2>
+        <p>
+            The blend above is a straightforward, transparent starting point: a plain average, not a fitted
+            model, deliberately simple so every number on this site can be traced back to a real market or a
+            real projection you can click through and check. Refining the weighting between DFS and sportsbook
+            sources using real results, and eventually rebuilding a start/sit call against real league rosters,
+            are explicit next steps, not one-time decisions.
+        </p>
     </div>
 </div>
 {% endblock %}
