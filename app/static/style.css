@@ -244,6 +244,41 @@ body {
     border-bottom: 1px solid rgba(255, 255, 255, 0.18);
 }
 
+.boom-tooltip-stats {
+    display: flex;
+    gap: 1.1rem;
+    margin-bottom: 0.4rem;
+}
+.boom-tooltip-stat {
+    display: flex;
+    flex-direction: column;
+}
+.boom-tooltip-value {
+    font-size: 1.25rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: #fff;
+}
+.boom-tooltip-label {
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.5);
+}
+.boom-tooltip-arrow {
+    align-self: flex-start;
+    margin-top: 0.2rem;
+    font-size: 1.1rem;
+    line-height: 1;
+    color: rgba(255, 255, 255, 0.35);
+}
+.boom-tooltip-detail {
+    font-size: 0.72rem;
+    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.65);
+}
+
 .global-tooltip .tooltip-table {
     border-collapse: collapse;
     width: 100%;

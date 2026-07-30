@@ -91,8 +91,9 @@
         <span class="boom-badge-lg">🚀</span>
         {% if boom.probability is not none %}
         <p>{{ (boom.probability * 100) | round | int }}% chance of topping {{ boom.target }} {{ boom.unit }} for
-            {{ boom.label }} ({{ boom.margin_pct }}% above the market's projected {{ boom.expected }} {{ boom.unit }}).
-            Boom potential is context, not part of the blended score.</p>
+            {{ boom.label }} ({{ boom.margin_pct }}% above the market's projected {{ boom.expected }} {{ boom.unit }}),
+            worth about +{{ boom.points_upside }} more fantasy points if it happens. Boom potential is context,
+            not part of the blended score.</p>
         {% else %}
         <p>Not enough alternate-line data yet to estimate boom potential for {{ boom.label }}.</p>
         {% endif %}

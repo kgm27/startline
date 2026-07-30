@@ -1,4 +1,4 @@
-# Going-Live Plan — Fantasy Football Advisor
+# Going-Live Plan: StartLine
 
 **Goal:** finalize the product, then take the app that currently runs only on your laptop (`localhost:8000`) and
 put it on the public internet as a polished, shareable, resume-worthy site — reliably, safely, and without
@@ -46,16 +46,15 @@ The plan has two parts:
       2025 season" banner whenever the displayed week isn't genuinely live. An explicit `?week=N` is still always
       honored as-is. This was a real gap, not just a documentation decision — visiting the site with no query
       params previously showed a blank "Week 1" page.
+- ✅ **D1 — Hosting provider (decided 2026-07-30):** **Render, always-on plan (~$7/mo).** Chosen over the free
+      tier specifically to avoid the ~30-60s sleep/wake delay on a resume link a recruiter might click cold.
+      Not yet signed up for, that's Phase 6.1.
+- ✅ **D2 — Custom domain (decided 2026-07-30):** yes, a custom domain (~$12/yr) rather than the free host URL.
+      Still need to actually pick and register a domain name, a separate step, not yet done. Ties to Phase 8.2.
+- ✅ **D4 — Database strategy (decided 2026-07-30):** **SQLite on a persistent disk**, matches the current setup,
+      no migration needed for v1.
 
 **Still open (settle these next):**
-- [ ] **D1 — Hosting provider.** Recommendation: **Render** (Python-friendly, connects to GitHub, auto-deploys on
-      push, supports a persistent disk so the SQLite database survives restarts). Alternatives: Railway, Fly.io.
-      *Cost note (see cost-transparency rule): Render's always-on plan is ~$7/mo; a free tier exists but the site
-      "sleeps" when idle and takes ~30–60s to wake. Nothing gets signed up for without your OK.*
-- [ ] **D2 — Custom domain?** e.g. `something.com` (~$12/yr) vs. the free host URL (e.g. `ff-advisor.onrender.com`)
-      for now. Nicer on a resume but not required for v1.
-- [ ] **D4 — Database strategy.** SQLite on a persistent disk (simplest, recommended) vs. hosted Postgres (more
-      robust, more setup). Recommendation: **SQLite + persistent disk** for v1.
 - [ ] **D5 — Pull cadence & Odds API plan (for the trend feature, Phase 3B).**
       **Cadence — SETTLED (season only; off-season → drop to the free tier):**
       - Baseline: **2 pulls/day, every day** (~8am + ~6pm ET) — catches injury news + weekly line drift.
@@ -282,10 +281,18 @@ reads straight off that same curve (e.g. P(yards ≥ line + 30) is already in th
       detail page (Phase 2.3), ideally showing the real number, e.g. "38% chance of 30+ yards over the line."
       Done: a 🚀 badge next to the player's name on Dashboard rows (hover tooltip with the real percentage and
       stat), and an accent-colored callout on Player detail with the actual sentence, e.g. "25% chance of topping
-      95.4 yds for Rushing Yards (30% above the market's projected 73.4 yds)."
+      95.4 yds for Rushing Yards (30% above the market's projected 73.4 yds)." **2026-07-30 refinement:** owner
+      asked whether boom potential should be measured against the blended score instead of the raw stat.
+      Discussed the tradeoff: a true points-based version needs merging several stat distributions (yards + TDs
+      + receptions) into one, which means assuming how correlated they are with each other, exactly the "v2"
+      complexity 3C.2 deliberately scoped out. Agreed on a middle ground instead: keep the same single-stat
+      curve (still statistically sound, already verified), but also convert the yardage upside into fantasy
+      points using the existing scoring rate, so the badge/callout speaks in the site's usual "points" language.
+      Both surfaces now show it, e.g. Dashboard tooltip: "worth about +3.3 fantasy pts if it happens"; Player
+      detail: "worth about +2.2 more fantasy points if it happens."
 - [ ] **3C.6** *(Optional companion)* **Floor / "bust" indicator**: the mirror tail, P(outcome ≤ line - margin),
       to separate safe plays from boom-or-bust plays. Not required for v1, but nearly free once 3C.1-3C.3 exist.
-      Not built (optional, deferred).
+      Owner confirmed 2026-07-30: not wanted, boom only. Not built, will not be built.
 - [x] **3C.7** **Verify against a known example.** The Titans@49ers game already has real alternate-line data (e.g.
       McCaffrey's rush yards came out right-skewed, ~73 vs a ~65.5 line), a good sanity check that the tail math
       is reading the curve correctly. Verified live: McCaffrey's Player detail page shows the boom callout's
@@ -300,23 +307,69 @@ reads straight off that same curve (e.g. P(yards ≥ line + 30) is already in th
 
 *Goal: the app can start on a server that isn't your laptop. No public exposure yet.*
 
-- [ ] **4.1** Make the app read the server's port from a `PORT` environment variable (currently hardcoded to 8000).
-- [ ] **4.2** Add a production start command / `Procfile` (e.g. `web: uvicorn app.main:app --host 0.0.0.0 --port $PORT`).
-- [ ] **4.3** Pin dependency versions in `requirements.txt` (currently `>=`; pin to exact versions).
-- [ ] **4.4** Confirm secrets are read from real environment variables, not only the `.env` file (`config.py`
-      already uses `os.getenv`, so this likely just needs verifying on the host).
-- [ ] **4.5** Decide how the production database gets created and seeded (the `.db` file isn't in git). Ties to **D4**.
-- [ ] **4.6** Test the production start command locally once, the way the server will run it.
+- [x] **4.1** Make the app read the server's port from a `PORT` environment variable (currently hardcoded to 8000).
+      Done: there's no Python code hardcoding the port (it was only ever a CLI flag), so this is solved entirely
+      by 4.2's `Procfile` using `$PORT`. Local dev (`.claude/launch.json`) keeps its own explicit `--port 8000`,
+      unaffected since `PORT` is never set locally.
+- [x] **4.2** Add a production start command / `Procfile` (e.g. `web: uvicorn app.main:app --host 0.0.0.0 --port $PORT`).
+      Done: `Procfile` added at the repo root with exactly that command. `--host 0.0.0.0` is required for
+      production (binds all interfaces; uvicorn's local-dev default of 127.0.0.1 wouldn't be reachable from
+      outside the container).
+- [x] **4.3** Pin dependency versions in `requirements.txt` (currently `>=`; pin to exact versions). Done: pinned
+      to the exact versions already installed and verified working (fastapi 0.128.8, uvicorn[standard] 0.39.0,
+      sqlalchemy 2.0.51, jinja2 3.1.6, python-dotenv 1.2.1, httpx 0.28.1, python-multipart 0.0.20).
+- [x] **4.4** Confirm secrets are read from real environment variables, not only the `.env` file (`config.py`
+      already uses `os.getenv`, so this likely just needs verifying on the host). Verified directly: temporarily
+      moved `.env` aside, ran the app with `ODDS_API_KEY`/`FANTASYPROS_API_KEY` set as real shell env vars
+      (simulating production, where no `.env` file is deployed), confirmed `get_settings()` still read them
+      correctly. `.env` restored immediately after.
+- [x] **4.5** Decide how the production database gets created and seeded (the `.db` file isn't in git). Ties to **D4**.
+      Decided: upload the existing local `data/advisor.db` (already holds the real, paid-for Week 15 2025
+      backtest) to the production persistent disk on first deploy, rather than re-running the historical Odds
+      API pull in production and spending those credits again. Actual upload happens at Phase 6.5.
+- [x] **4.6** Test the production start command locally once, the way the server will run it. Done: ran the exact
+      `Procfile` command (`uvicorn app.main:app --host 0.0.0.0 --port $PORT`) locally with `PORT=8000`, confirmed
+      it starts and serves `/dashboard` with a 200.
 
 ## Phase 5 — Secure it before it's public
 
 *Goal: a stranger who finds the site cannot cost you money or break your data.*
 
-- [ ] **5.1** 🔴 **Lock down data refresh.** With the public button gone (2.2), ensure any remaining refresh trigger
-      requires a secret token (stored as an env var). This guards your paid Odds API credits.
-- [ ] **5.2** Add basic rate limiting so the public pages can't be hammered.
-- [ ] **5.3** Confirm no secrets are committed: `.env` stays gitignored; keys live only in the host's settings.
-      Double-check the git history never contained a real key.
+- [x] **5.1** 🔴 **Lock down data refresh.** With the public button gone (2.2), ensure any remaining refresh trigger
+      requires a secret token (stored as an env var). This guards your paid Odds API credits. Done: added
+      `REFRESH_SECRET` to `.env`/`.env.example` (a random 43-char token, generated with Python's `secrets`
+      module). `POST /refresh` now requires a matching `X-Refresh-Token` header, checked with a timing-safe
+      comparison (`secrets.compare_digest`), before touching anything else in the function, so it fails closed:
+      if `REFRESH_SECRET` isn't set at all, every request is rejected rather than silently allowed through.
+      Verified both rejection paths live (no header → 401, wrong header → 401). Did **not** test the accepting
+      path over HTTP, since a real successful call would spend real Odds API credits; confirmed by reading the
+      code that the auth check runs before `sync_players()`/`sync_odds()`, so nothing downstream can run without
+      a valid token.
+- [x] **5.2** Add basic rate limiting so the public pages can't be hammered. Done: an in-memory, fixed-window
+      per-IP limiter (100 requests/60s, no new dependency needed for a single-process app), applied globally via
+      Starlette middleware. Reads `X-Forwarded-For` for the real visitor IP (Render sits the app behind a proxy,
+      so `request.client.host` alone would be the proxy's address, not the visitor's), falling back to
+      `request.client.host` for local dev. Periodic cleanup every 5 minutes keeps memory bounded. Verified with a
+      fast in-process burst (115 requests against `/` in under half a second): exactly 100 succeeded, #101 onward
+      correctly got 429. 🔴 **Found and fixed a real, separate performance issue while testing this:**
+      `/dashboard`, `/about`, and `/compare` each took ~800ms-1100ms to load (measured directly), because all
+      three call `_player_rows()`, which ran 3 separate DB queries per player (~374 players = ~1,100+ queries)
+      plus the Phase 3C boom-probability curve math, every request. **Two-part fix:** (1) batched the 3 per-player
+      queries into 3 total queries for the whole week (grouped into dicts by player_id in Python), which alone
+      brought load times down to ~460-625ms; (2) profiling showed the *remaining* time was mostly SQLAlchemy
+      hydrating ~30,000 `OddsProp` rows into ORM objects every request, not the query count, so added a short
+      (30s) in-memory cache on `_player_rows()`'s output, cleared immediately whenever `/refresh` actually writes
+      new data (so a real refresh shows up right away, not after a stale-cache wait). Verified live: first load
+      after a restart ~570ms (cache miss), every load after that ~90-125ms, an 8-10x improvement, with the
+      Dashboard's real player data and boom badges still rendering correctly.
+- [x] **5.3** Confirm no secrets are committed: `.env` stays gitignored; keys live only in the host's settings.
+      Double-check the git history never contained a real key. Verified: `.env` is untracked and was never
+      committed in any commit, ever (`git log --all --full-history -- .env` is empty). Searched every commit's
+      full diff for real key-shaped values (not just the env var names) and for any long token-like strings, both
+      came back clean, the only matches were commit SHAs and code identifiers. Listed every file ever committed
+      across all history: no `.db` file, no `.env`, no stray scratch/test scripts with hardcoded credentials.
+      Also confirmed `.env.example` only has empty placeholder values and the new `Procfile` has no secrets in
+      it, before either gets committed.
 - [ ] **5.4** Run a security review before launch (`/security-review`).
 - [ ] **5.5** Add clean 404/500 error pages that don't leak internal details.
 
@@ -520,3 +573,70 @@ a cheap **daily** headline pull (feeds the Phase 3B trend chart) and the fuller 
   both this plan's earlier note (~73 vs a ~65.5 line) and the visible Rushing Yards market breakdown (73.39 yds)
   exactly; (2) a direct query confirmed 48 players flagged high-ceiling across QB/RB/WR/TE with sensible
   20-32% probabilities. 3C.1/3C.2/3C.3/3C.4/3C.5/3C.7 checked off; 3C.6 (optional floor/bust mirror) not built.
+- 2026-07-30 — Discussed whether boom potential should be measured against the blended score instead of the raw
+  stat. Explained the tradeoff: a real points-based version needs merging multiple stat distributions (not just
+  one), which requires assuming their correlation, exactly the "v2" complexity 3C.2 already scoped out on
+  purpose. Agreed on a middle ground: keep the existing single-stat curve unchanged, but also convert the 30%
+  yardage margin into fantasy points (using the same scoring rate the blended score is built from) and show that
+  alongside the percentage on both the Dashboard tooltip and Player detail callout. Owner also confirmed: boom
+  only, no "bust"/floor mirror wanted, so 3C.6 will not be built. Verified live: McCaffrey's Player detail
+  callout now reads "...worth about +2.2 more fantasy points if it happens"; Joe Burrow's Dashboard tooltip
+  reads "...worth about +3.3 fantasy pts if it happens."
+- 2026-07-30 — Owner flagged the Dashboard's boom-badge hover was long and text-heavy. Restructured it: the
+  percentage and points boost are now large text on their own line ("20%  +3.3 pts"), with the explanation
+  sentence kept small underneath instead of one run-on paragraph. Player detail's callout box was left as-is
+  (it's an always-visible sentence, not a hover, so the "text-heavy" complaint didn't apply there). Verified by
+  triggering the tooltip directly on Joe Burrow's badge and reading the rendered HTML.
+- 2026-07-30 — Follow-up: owner noted the "+3.3 pts" was still small and unexplained. Redesigned as two co-equal
+  stat blocks side by side ("20% / CHANCE" and "+3.3 / PTS UPSIDE", same size, each with its own small caption),
+  and added the missing explanation back into the detail sentence ("...worth about +3.3 fantasy points if it
+  happens"), which had been dropped when the tooltip was first restructured out of plain text. Verified via the
+  rendered tooltip HTML on Joe Burrow's badge.
+- 2026-07-30 — Owner asked for a visual arrow between the two stats to show they're connected (the chance
+  produces the points upside). Added a small "→" between the two stat blocks, aligned to the top of the numbers
+  rather than centered across the whole block (so it doesn't visually drift toward the small caption text
+  underneath). Verified live: "20% CHANCE → +3.3 PTS UPSIDE" on Joe Burrow's badge.
+- 2026-07-30 — Settled Part 2's open hosting decisions: **D1** Render, always-on (~$7/mo, chosen over the free
+  tier to avoid sleep/wake delay on a resume link). **D2** yes to a custom domain (~$12/yr), name not picked yet.
+  **D4** SQLite + persistent disk, as recommended. None of this is signed up for yet, decisions only, Phase 6.1
+  is the actual Render signup. Only D5 (Odds API pull cadence/plan purchase) remains open.
+- 2026-07-30 — Phase 4 (make the app deployable) fully built and verified: `Procfile` added
+  (`uvicorn app.main:app --host 0.0.0.0 --port $PORT`), `requirements.txt` pinned to exact working versions,
+  env-var-only secret loading verified by testing with `.env` temporarily removed, and the exact Procfile command
+  tested locally end to end. Production DB approach decided (upload the existing real `data/advisor.db` rather
+  than re-pulling historical odds in production). All of 4.1-4.6 checked off.
+- 2026-07-30 — Renamed the site to **StartLine** (from the "Start/Sit Advisor" working title), covering both the
+  live site and the planning docs per owner's choice. First pass briefly used "LineupLock" before the owner
+  corrected it to StartLine minutes later in the same session; that name never really settled, so this entry
+  reflects the actual final name rather than logging both as separate renames. Live site: nav badge "FF" to "SL",
+  nav wordmark "Advisor" to "StartLine", favicon initials, every page `<title>`, the Dashboard H1, the Landing
+  hero eyebrow, and the FastAPI app title (shows in the auto-generated `/docs` page). Docs: this file's H1 and
+  the project brief's H1.
+  Deliberately left alone: the historical running-log entries describing the *old* "FF" favicon build (a record
+  of what was true then, not something to rewrite), the `advisor.db` filename (not user-visible branding), the
+  brief's filename itself, and the repo's containing folder name. Verified live across Landing/Dashboard/About/
+  Compare (nav, titles, headings) and the favicon SVG directly. Confirmed via grep: zero remaining references to
+  the old name anywhere in app code or docs.
+- 2026-07-30 — 5.1 done: `POST /refresh` now requires a secret `X-Refresh-Token` header, checked against a new
+  `REFRESH_SECRET` env var (random 43-char token) with a timing-safe comparison, fails closed if the secret
+  isn't configured at all. Verified the rejection paths live (missing/wrong header both 401); did not test the
+  accepting path over HTTP since that would spend real Odds API credits, confirmed via code review that the auth
+  check gates everything else in the function.
+- 2026-07-30 — 5.2 done: added in-memory per-IP rate limiting (100 req/60s, Starlette middleware, respects
+  X-Forwarded-For behind Render's proxy). Verified with a fast in-process burst against `/`: 100 succeeded, #101
+  onward got 429. While debugging an earlier slow/inconclusive test, found that `/dashboard`, `/about`, and
+  `/compare` each genuinely take ~800ms-1100ms per load (measured directly) due to `_player_rows()`'s N+1 query
+  pattern (~1,100+ DB queries per request across ~374 players) plus the Phase 3C boom-probability math running
+  every time. Landing, which skips that function, loads in 1-6ms. Flagged to owner as a separate decision, not
+  fixed yet.
+- 2026-07-30 — Owner asked for the `_player_rows()` performance issue to be fixed. Batched the per-player N+1
+  queries into 3 bulk queries (dict-grouped by player_id in Python) first; that alone cut load times to
+  ~460-625ms. Profiled with cProfile to find what was left: ~70% of remaining time was SQLAlchemy hydrating
+  ~30,000 `OddsProp` rows into ORM objects, not the query count itself. Added a 30-second in-memory cache on the
+  function's output (cleared immediately on a successful `/refresh`, not just left to expire, so real new data
+  shows up right away). Verified: first load after a restart ~570ms, every load after that ~90-125ms across
+  Dashboard/About/Compare, an 8-10x improvement over the original ~800-1100ms. Confirmed live the Dashboard still
+  renders correctly (real player data, boom badges intact) after the change.
+- 2026-07-30 — 5.3 done: confirmed `.env` was never committed in this repo's history (checked, not just assumed)
+  and searched every commit's full diff for real leaked key values, none found. Also spot-checked the current
+  uncommitted `.env.example` and `Procfile` for accidental secrets before they get committed. All clean.

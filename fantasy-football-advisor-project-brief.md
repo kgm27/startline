@@ -1,4 +1,4 @@
-# Fantasy Football Start/Sit Advisor — Project Brief
+# StartLine: Project Brief
 
 ## 1. Project Overview
 

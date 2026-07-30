@@ -1,13 +1,16 @@
 """FastAPI app: the dashboard page plus a manual "refresh data" action."""
 import json
 import os
+import secrets
+import time
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import FastAPI, Request, Depends, HTTPException
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, Request, Depends, HTTPException, Header
+from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.db import Base, engine, get_db
 from app.models import Player, DfsProjection, OddsProp, ExpertRank, ThresholdSnapshot, PredictionSnapshot
@@ -36,7 +39,57 @@ from app.scoring.config import SCORING_RULES
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Fantasy Football Start/Sit Advisor")
+# Basic per-IP rate limiting (Phase 5.2) so a stranger can't hammer the
+# public pages. In-memory, fixed-window: this app runs as a single
+# process, so no Redis/shared store is needed. Not meant to stop a
+# determined distributed attacker, just casual abuse or a runaway script.
+RATE_LIMIT_WINDOW_SECONDS = 60
+RATE_LIMIT_MAX_REQUESTS = 100
+RATE_LIMIT_CLEANUP_INTERVAL_SECONDS = 300
+
+
+def _client_ip(request):
+    # Render (like most PaaS) sits the app behind a proxy, so the real
+    # visitor IP arrives via X-Forwarded-For, not request.client.host
+    # (which would otherwise be the proxy's own address). Falls back to
+    # request.client.host for local dev, where that header isn't set.
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app):
+        super().__init__(app)
+        self._counts = {}  # ip -> [window_start_ts, count]
+        self._last_cleanup = time.time()
+
+    async def dispatch(self, request, call_next):
+        now = time.time()
+        if now - self._last_cleanup > RATE_LIMIT_CLEANUP_INTERVAL_SECONDS:
+            self._counts = {
+                ip: v for ip, v in self._counts.items()
+                if now - v[0] < RATE_LIMIT_WINDOW_SECONDS
+            }
+            self._last_cleanup = now
+
+        ip = _client_ip(request)
+        window_start, count = self._counts.get(ip, (now, 0))
+        if now - window_start >= RATE_LIMIT_WINDOW_SECONDS:
+            window_start, count = now, 0
+        count += 1
+        self._counts[ip] = (window_start, count)
+        if count > RATE_LIMIT_MAX_REQUESTS:
+            return JSONResponse(
+                {"detail": "Too many requests, please slow down and try again shortly."},
+                status_code=429,
+            )
+        return await call_next(request)
+
+
+app = FastAPI(title="StartLine")
+app.add_middleware(RateLimitMiddleware)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
@@ -394,15 +447,49 @@ def landing(request: Request):
     return templates.TemplateResponse("landing.html", {"request": request, "active_page": "landing"})
 
 
+_PLAYER_ROWS_CACHE = {}
+_PLAYER_ROWS_CACHE_TTL_SECONDS = 30
+
+
 def _player_rows(db, week, scoring):
     """Every player's headline numbers for a given week: the shared dataset
     behind both the Dashboard table and the Comparison picker, so the two
-    pages can never show different numbers for the same player/week."""
+    pages can never show different numbers for the same player/week.
+    Batch-fetches each table once for the whole week rather than once per
+    player: looping ~370+ players with 3 queries each (an N+1 pattern) was
+    measured taking ~800ms-1000ms per page load. Profiling after that fix
+    showed the remaining ~400ms was mostly SQLAlchemy hydrating ~30,000
+    OddsProp rows into ORM objects, not the query count itself, so this
+    also caches the built rows briefly (_PLAYER_ROWS_CACHE_TTL_SECONDS):
+    the underlying data only changes when /refresh runs, which is gated
+    behind a secret token and happens at most a few times a day, not on
+    every page view."""
+    cache_key = (week, scoring)
+    cached = _PLAYER_ROWS_CACHE.get(cache_key)
+    if cached and time.time() - cached[0] < _PLAYER_ROWS_CACHE_TTL_SECONDS:
+        return cached[1]
+
+    projections_by_player = {}
+    for row in db.query(DfsProjection).filter_by(week=week).all():
+        projections_by_player.setdefault(row.player_id, []).append(row)
+
+    props_by_player = {}
+    for row in db.query(OddsProp).filter_by(week=week).all():
+        props_by_player.setdefault(row.player_id, []).append(row)
+
+    # setdefault (not a plain dict comprehension) so the first ExpertRank
+    # row per player wins, matching the old per-player .first() semantics,
+    # in case more than one ever exists for the same player/week (e.g.
+    # different scoring formats).
+    expert_by_player = {}
+    for row in db.query(ExpertRank).filter_by(week=week).all():
+        expert_by_player.setdefault(row.player_id, row)
+
     rows = []
     for player in db.query(Player).all():
-        projections = db.query(DfsProjection).filter_by(player_id=player.id, week=week).all()
-        props = db.query(OddsProp).filter_by(player_id=player.id, week=week).all()
-        expert = db.query(ExpertRank).filter_by(player_id=player.id, week=week).first()
+        projections = projections_by_player.get(player.id, [])
+        props = props_by_player.get(player.id, [])
+        expert = expert_by_player.get(player.id)
 
         dfs_pts = dfs_projection_points(projections)
         betting_pts = betting_derived_points(props, scoring)
@@ -415,9 +502,17 @@ def _player_rows(db, week, scoring):
 
         boom_stat = MAIN_STAT_BY_POSITION.get(player.position)
         boom_prob = None
+        boom_points_upside = None
         if boom_stat:
             boom_curve, boom_expected = _main_stat_curve(props, boom_stat)
-            boom_prob = _boom_probability(boom_curve, boom_expected)
+            if boom_expected:
+                # what the 30% margin is worth in fantasy points, using the
+                # same per-unit rate the blended score itself is built from,
+                # so the boom flag speaks the site's usual "points" language
+                # instead of leaving the reader to convert yards themselves
+                boom_rate = getattr(scoring, STAT_TO_RULE[boom_stat])
+                boom_points_upside = round(boom_expected * BOOM_MARGIN * boom_rate, 1)
+                boom_prob = _boom_probability(boom_curve, boom_expected)
 
         rows.append({
             "id": player.id,
@@ -431,6 +526,7 @@ def _player_rows(db, week, scoring):
             "expert": expert_persp.label if expert_persp else None,
             "boom_stat": boom_stat,
             "boom_prob": boom_prob,
+            "boom_points_upside": boom_points_upside,
         })
 
     # "High ceiling" flag: top quartile of boom_prob within each position,
@@ -458,12 +554,30 @@ def _player_rows(db, week, scoring):
         r["boom_tooltip"] = None
         if r["boom_flag"]:
             stat_label = STAT_LABELS.get(r["boom_stat"], r["boom_stat"])
+            # The percentage and points boost are the headline: large,
+            # side by side, each labeled so neither number needs the
+            # paragraph below to be understood on its own. The explanation
+            # is real but secondary, kept small underneath.
             r["boom_tooltip"] = (
-                f"High ceiling: {r['boom_prob'] * 100:.0f}% chance of beating the market's expected "
-                f"{stat_label.lower()} by {BOOM_MARGIN * 100:.0f}% or more."
+                '<div class="tooltip-title">High Ceiling</div>'
+                '<div class="boom-tooltip-stats">'
+                '<div class="boom-tooltip-stat">'
+                f'<span class="boom-tooltip-value">{r["boom_prob"] * 100:.0f}%</span>'
+                '<span class="boom-tooltip-label">chance</span>'
+                "</div>"
+                '<span class="boom-tooltip-arrow">&rarr;</span>'
+                '<div class="boom-tooltip-stat">'
+                f'<span class="boom-tooltip-value">+{r["boom_points_upside"]}</span>'
+                '<span class="boom-tooltip-label">pts upside</span>'
+                "</div>"
+                "</div>"
+                f'<div class="boom-tooltip-detail">Chance of beating the market\'s expected '
+                f"{stat_label.lower()} by {BOOM_MARGIN * 100:.0f}% or more, worth about "
+                f"+{r['boom_points_upside']} fantasy points if it happens.</div>"
             )
 
     rows.sort(key=lambda r: r["blended"], reverse=True)
+    _PLAYER_ROWS_CACHE[cache_key] = (time.time(), rows)
     return rows
 
 
@@ -641,6 +755,7 @@ def player_detail(request: Request, player_id: str, week: int = None, db: Sessio
                     "expected": round(expected_count, 1),
                     "target": round(expected_count * (1 + BOOM_MARGIN), 1),
                     "margin_pct": round(BOOM_MARGIN * 100),
+                    "points_upside": round(expected_count * BOOM_MARGIN * rate, 1),
                     "probability": _boom_probability(curve, expected_count),
                 }
             # for display: each threshold, its pooled probability, and which
@@ -922,10 +1037,16 @@ def capture_prediction_snapshots(db: Session, week: int) -> int:
 
 
 @app.post("/refresh")
-def refresh(db: Session = Depends(get_db)):
-    """Pulls fresh data from every source that's currently set up.
+def refresh(db: Session = Depends(get_db), x_refresh_token: str = Header(None)):
+    """Pulls fresh data from every source that's currently set up. Requires
+    a matching X-Refresh-Token header (see REFRESH_SECRET in .env) so a
+    stranger who finds this URL can't spend real Odds API credits. Fails
+    closed: if REFRESH_SECRET isn't configured at all, every request is
+    rejected rather than silently allowed through.
     FantasyPros pulls get wired in here once a key is added."""
     settings = get_settings()
+    if not settings.refresh_secret or not secrets.compare_digest(x_refresh_token or "", settings.refresh_secret):
+        raise HTTPException(status_code=401, detail="Missing or invalid X-Refresh-Token header")
     sync_players(db)
 
     notes = []
@@ -945,6 +1066,7 @@ def refresh(db: Session = Depends(get_db)):
             notes.append(f"Captured {snapshot_count} threshold snapshot(s) for the historical % chance charts")
             prediction_count = capture_prediction_snapshots(db, week)
             notes.append(f"Captured {prediction_count} headline-score snapshot(s) for the trend charts")
+            _PLAYER_ROWS_CACHE.clear()  # so the new data shows immediately, not after the cache TTL
         except Exception as exc:
             notes.append(f"Odds refresh failed: {exc}")
 

@@ -13,6 +13,7 @@ class Settings:
     fantasypros_api_key: str
     scoring_format: str
     db_path: str
+    refresh_secret: str
 
 
 def get_settings() -> Settings:
@@ -21,4 +22,5 @@ def get_settings() -> Settings:
         fantasypros_api_key=os.getenv("FANTASYPROS_API_KEY", ""),
         scoring_format=os.getenv("SCORING_FORMAT", "half_ppr"),
         db_path=str(Path(__file__).resolve().parent.parent / "data" / "advisor.db"),
+        refresh_secret=os.getenv("REFRESH_SECRET", ""),
     )
