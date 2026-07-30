@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}Compare Players — Start/Sit Advisor{% endblock %}
+{% block content %}
+<div class="page" x-data="compare()">
+    <header class="topbar">
+        <div class="topbar-titles">
+            <h1>Compare Players</h1>
+            <p class="subtitle">Week {{ week }} &middot; head-to-head DFS / betting / blended numbers</p>
+        </div>
+    </header>
+
+    {% if is_demo_week %}
+    <div class="note-banner">
+        Demo data — Week {{ week }}, 2025 season. This is a real backtest (not fabricated numbers), shown because
+        it's the off-season and there's no live week to display. Live data resumes once the season starts.
+    </div>
+    {% endif %}
+
+    <div class="compare-pickers">
+        <div class="compare-picker-col">
+            <template x-if="!playerA">
+                <div class="search-box compare-search">
+                    <input type="text" placeholder="Search for Player A…" x-model="queryA"
+                           @focus="focusA = true" @blur="setTimeout(() => focusA = false, 150)">
+                    <div class="combo-dropdown" x-show="focusA && queryA.trim().length" x-cloak>
+                        <template x-for="r in matches(queryA, playerB)" :key="r.id">
+                            <button type="button" class="combo-item" @mousedown.prevent="selectA(r)">
+                                <span x-text="r.name"></span>
+                                <span class="combo-meta" x-text="r.position + ' · ' + r.team"></span>
+                            </button>
+                        </template>
+                        <div class="combo-empty" x-show="matches(queryA, playerB).length === 0">No players match.</div>
+                    </div>
+                </div>
+            </template>
+            <template x-if="playerA">
+                <div class="compare-selected">
+                    <div>
+                        <div class="compare-selected-name" x-text="playerA.name"></div>
+                        <div class="compare-selected-meta" x-text="playerA.position + ' · ' + playerA.team"></div>
+                    </div>
+                    <button type="button" class="compare-change" @click="clearA()">Change</button>
+                </div>
+            </template>
+        </div>
+
+        <button type="button" class="btn compare-swap" @click="swap()" :disabled="!playerA || !playerB" title="Swap players">&#8646;</button>
+
+        <div class="compare-picker-col">
+            <template x-if="!playerB">
+                <div class="search-box compare-search">
+                    <input type="text" placeholder="Search for Player B…" x-model="queryB"
+                           @focus="focusB = true" @blur="setTimeout(() => focusB = false, 150)">
+                    <div class="combo-dropdown" x-show="focusB && queryB.trim().length" x-cloak>
+                        <template x-for="r in matches(queryB, playerA)" :key="r.id">
+                            <button type="button" class="combo-item" @mousedown.prevent="selectB(r)">
+                                <span x-text="r.name"></span>
+                                <span class="combo-meta" x-text="r.position + ' · ' + r.team"></span>
+                            </button>
+                        </template>
+                        <div class="combo-empty" x-show="matches(queryB, playerA).length === 0">No players match.</div>
+                    </div>
+                </div>
+            </template>
+            <template x-if="playerB">
+                <div class="compare-selected">
+                    <div>
+                        <div class="compare-selected-name" x-text="playerB.name"></div>
+                        <div class="compare-selected-meta" x-text="playerB.position + ' · ' + playerB.team"></div>
+                    </div>
+                    <button type="button" class="compare-change" @click="clearB()">Change</button>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <template x-if="playerA && playerB">
+        <div class="table-card">
+            <table class="compare-table">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th class="compare-player-head" :class="colClass('A')">
+                            <a :href="'/player/' + playerA.id + '?week={{ week }}'" x-text="playerA.name"></a>
+                            <div class="compare-player-meta">
+                                <span class="team-badge" :style="teamStyle(playerA.team)" x-text="playerA.team"></span>
+                                <span x-text="playerA.position"></span>
+                            </div>
+                            <template x-if="playerA.injury">
+                                <div class="compare-injury-flag"
+                                     @mouseenter="showTooltip($event, INJURY_DEFINITIONS[playerA.injury] || playerA.injury)"
+                                     @mouseleave="hideTooltip()">
+                                    <span x-text="playerA.injury"></span>
+                                </div>
+                            </template>
+                        </th>
+                        <th class="compare-player-head" :class="colClass('B')">
+                            <a :href="'/player/' + playerB.id + '?week={{ week }}'" x-text="playerB.name"></a>
+                            <div class="compare-player-meta">
+                                <span class="team-badge" :style="teamStyle(playerB.team)" x-text="playerB.team"></span>
+                                <span x-text="playerB.position"></span>
+                            </div>
+                            <template x-if="playerB.injury">
+                                <div class="compare-injury-flag"
+                                     @mouseenter="showTooltip($event, INJURY_DEFINITIONS[playerB.injury] || playerB.injury)"
+                                     @mouseleave="hideTooltip()">
+                                    <span x-text="playerB.injury"></span>
+                                </div>
+                            </template>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="m in metrics" :key="m.key">
+                        <tr :class="{ 'compare-row-blended': m.key === 'blended' }">
+                            <td x-text="m.label"></td>
+                            <td class="compare-value" :class="[colClass('A'), { 'compare-winner': winner(m.key) === 'A' }]">
+                                <span x-text="fmt(playerA[m.key])"></span>
+                                <span class="compare-delta" x-show="winner(m.key) === 'A'" x-text="'+' + delta(m.key)"></span>
+                            </td>
+                            <td class="compare-value" :class="[colClass('B'), { 'compare-winner': winner(m.key) === 'B' }]">
+                                <span x-text="fmt(playerB[m.key])"></span>
+                                <span class="compare-delta" x-show="winner(m.key) === 'B'" x-text="'+' + delta(m.key)"></span>
+                            </td>
+                        </tr>
+                    </template>
+                    <tr>
+                        <td>Expert Perspective</td>
+                        <td :class="colClass('A')" x-text="playerA.expert || '—'"></td>
+                        <td :class="colClass('B')" x-text="playerB.expert || '—'"></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </template>
+
+    <template x-if="!(playerA && playerB)">
+        <div class="table-card">
+            <p class="empty-state">Pick two players above to see their DFS, sportsbook, and blended numbers side by side.</p>
+        </div>
+    </template>
+
+    <div class="global-tooltip" :class="{ 'tooltip-visible': tooltipVisible, 'tooltip-above': tooltipAbove }"
+         x-ref="tooltip"
+         :style="`left:${tooltipX}px; top:${tooltipY}px;`"
+         x-html="tooltipText"></div>
+</div>
+
+<script>
+    const ALL_ROWS = {{ rows_json | safe }};
+    const INITIAL_A = {{ initial_a_json | safe }};
+    const INITIAL_B = {{ initial_b_json | safe }};
+
+    function compare() {
+        return {
+            allRows: ALL_ROWS,
+            metrics: [
+                { key: 'blended', label: 'Blended' },
+                { key: 'dfs_pts', label: 'DFS Projection' },
+                { key: 'betting_pts', label: 'Sportsbook Projection' },
+            ],
+            queryA: '',
+            queryB: '',
+            focusA: false,
+            focusB: false,
+            playerA: null,
+            playerB: null,
+            tooltipVisible: false,
+            tooltipText: '',
+            tooltipX: 0,
+            tooltipY: 0,
+            tooltipAbove: false,
+            init() {
+                if (INITIAL_A) this.playerA = this.allRows.find(r => String(r.id) === String(INITIAL_A)) || null;
+                if (INITIAL_B) this.playerB = this.allRows.find(r => String(r.id) === String(INITIAL_B)) || null;
+            },
+            matches(query, exclude) {
+                const q = query.trim().toLowerCase();
+                if (!q) return [];
+                return this.allRows
+                    .filter(r => !exclude || r.id !== exclude.id)
+                    .filter(r => r.name.toLowerCase().includes(q)
+                        || r.team.toLowerCase().includes(q)
+                        || (TEAM_NAMES[r.team] || '').toLowerCase().includes(q))
+                    .slice(0, 8);
+            },
+            selectA(r) { this.playerA = r; this.queryA = ''; this.focusA = false; this.syncUrl(); },
+            selectB(r) { this.playerB = r; this.queryB = ''; this.focusB = false; this.syncUrl(); },
+            clearA() { this.playerA = null; this.syncUrl(); },
+            clearB() { this.playerB = null; this.syncUrl(); },
+            swap() {
+                const a = this.playerA;
+                this.playerA = this.playerB;
+                this.playerB = a;
+                this.syncUrl();
+            },
+            syncUrl() {
+                const params = new URLSearchParams(window.location.search);
+                if (this.playerA) params.set('a', this.playerA.id); else params.delete('a');
+                if (this.playerB) params.set('b', this.playerB.id); else params.delete('b');
+                const qs = params.toString();
+                history.replaceState(null, '', qs ? ('?' + qs) : window.location.pathname);
+            },
+            fmt(value) { return value == null ? '—' : value.toFixed(2); },
+            delta(key) {
+                const av = this.playerA[key], bv = this.playerB[key];
+                if (av == null || bv == null) return '';
+                return Math.abs(av - bv).toFixed(2);
+            },
+            winner(key) {
+                const av = this.playerA[key], bv = this.playerB[key];
+                if (av == null || bv == null || av === bv) return null;
+                return av > bv ? 'A' : 'B';
+            },
+            // The overall call — always decided by Blended, regardless of which
+            // individual metric a row highlights — used to tint the winner's
+            // whole column so it reads as "start this one" at a glance.
+            overallWinner() {
+                return this.playerA && this.playerB ? this.winner('blended') : null;
+            },
+            colClass(side) {
+                return this.overallWinner() === side ? 'compare-col-winner' : '';
+            },
+            showTooltip(event, text) {
+                const rect = event.target.getBoundingClientRect();
+                this.tooltipText = text;
+                this.tooltipX = rect.left + rect.width / 2;
+                this.tooltipY = rect.bottom + 8;
+                this.tooltipAbove = false;
+                this.tooltipVisible = true;
+                this.$nextTick(() => {
+                    const el = this.$refs.tooltip;
+                    if (!el) return;
+                    const h = el.getBoundingClientRect().height;
+                    if (rect.bottom + 8 + h > window.innerHeight) {
+                        this.tooltipY = rect.top - h - 8;
+                        this.tooltipAbove = true;
+                    }
+                });
+            },
+            hideTooltip() {
+                this.tooltipVisible = false;
+            },
+        };
+    }
+</script>
+{% endblock %}

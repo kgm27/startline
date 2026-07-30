@@ -1,5 +1,5 @@
 """Database tables. Each class below becomes one table in the SQLite file."""
-from sqlalchemy import Column, Integer, String, Float, DateTime
+from sqlalchemy import Column, Integer, String, Float, Date, DateTime
 from app.db import Base
 
 
@@ -44,6 +44,24 @@ class OddsProp(Base):
     implied_probability = Column(Float)  # for TD markets, vig-adjusted if possible
     odds = Column(Integer)  # raw American odds for the Over (or single) side, e.g. -140, +230
     under_odds = Column(Integer)  # American odds for the Under side, when the market has one
+    updated_at = Column(DateTime)
+
+
+class ThresholdSnapshot(Base):
+    """One day's "Chance of Going Over" reading for one player/stat/threshold
+    — written each time a refresh pulls fresh odds, so the Player detail page
+    can eventually chart how that probability moved over the week. One row
+    per (player, week, stat, threshold, day): a same-day refresh updates the
+    existing row rather than piling up duplicates."""
+    __tablename__ = "threshold_snapshots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    player_id = Column(String, index=True)
+    week = Column(Integer, index=True)
+    stat = Column(String)  # e.g. "rush_yds", matches blend.py's MARKET_TO_STAT values
+    threshold = Column(Float)
+    probability = Column(Float)  # pooled "Chance of Going Over" at capture time, 0-1
+    snapshot_date = Column(Date, index=True)  # calendar day this reading was captured
     updated_at = Column(DateTime)
 
 

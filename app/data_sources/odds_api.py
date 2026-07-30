@@ -207,8 +207,11 @@ def fetch_historical_events(date: str, commence_time_from: str = None, commence_
 def fetch_historical_player_props(event_id: str, date: str) -> dict:
     """Player prop + DFS odds as they stood at a past snapshot time. Requires
     the paid plan. Costs 10 credits per region per market per event — with
-    2 regions (us + us_dfs) and 9 markets, that's 180 credits per game
-    pulled, far more than the live equivalent.
+    2 regions (us + us_dfs) and 15 markets (ALL_MARKETS: 8 core props + 6
+    alternate-line markets + the DFS fantasy-points market), that's 300
+    credits per game pulled, far more than the live equivalent. (Verified
+    2026-07-29 — this was previously documented as 180 credits/9 markets,
+    stale since ALTERNATE_MARKETS was added without updating this count.)
 
     Cached to disk (data/_cache/) — a past snapshot never changes, so a
     repeat call for the same event/date/markets/regions never needs to pay
@@ -476,7 +479,8 @@ def sync_historical_odds(
     Pulls one props snapshot per event, taken shortly before that game's
     actual kickoff — the closest equivalent to "final pregame line" without
     paying for multiple snapshots per game (each snapshot costs full price,
-    180 credits per event at our current market/region count)."""
+    300 credits per event at our current market/region count — see
+    fetch_historical_player_props)."""
     owns_session = db is None
     db = db or SessionLocal()
     try:

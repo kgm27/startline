@@ -1,37 +1,81 @@
 {% extends "base.html" %}
 {% block title %}{{ player.name }} — Week {{ week }} breakdown{% endblock %}
 {% block content %}
-<div class="page">
+<div class="page" x-data="playerDetail()">
     <header class="topbar">
         <div class="topbar-titles">
-            <a class="back-link" href="/?week={{ week }}">&larr; Back to dashboard</a>
+            <a class="back-link" href="/dashboard?week={{ week }}">&larr; Back to dashboard</a>
             <h1 style="margin-top: 0.4rem;">{{ player.name }}</h1>
-            <p class="subtitle">{{ player.position }} &middot; {{ player.team }} &middot; Week {{ week }}</p>
+            <p class="subtitle">
+                {{ player.position }} &middot;
+                <span class="team-badge" :style="teamStyle({{ player.team | tojson }})">{{ player.team }}</span>
+                &middot; Week {{ week }}
+                {% if player.injury_status %}
+                &middot;
+                <span class="hover-tag"
+                      @mouseenter="showTooltip($event, INJURY_DEFINITIONS[{{ player.injury_status | tojson }}] || {{ player.injury_status | tojson }})"
+                      @mouseleave="hideTooltip()">{{ player.injury_status }}</span>
+                {% endif %}
+            </p>
         </div>
     </header>
 
+    {% if is_demo_week %}
+    <div class="note-banner">
+        Demo data — Week {{ week }}, 2025 season. This is a real backtest (not fabricated numbers), shown because
+        it's the off-season and there's no live week to display. Live data resumes once the season starts.
+    </div>
+    {% endif %}
+
     <section class="summary-box">
-        <div><span class="summary-label">DFS Projection</span><span class="summary-value">{{ dfs_pts if dfs_pts is not none else "—" }}</span></div>
-        <div><span class="summary-label">Betting-Derived</span><span class="summary-value">{{ betting_pts if betting_pts is not none else "—" }}</span></div>
-        <div><span class="summary-label">Blended</span><span class="summary-value">{{ blended if blended is not none else "—" }}</span></div>
+        <div>
+            <span class="summary-label">DFS Projection</span>
+            {% if dfs_pts is not none and dfs_breakdown %}
+            <a href="#dfs-projections" class="summary-value"
+               @mouseenter="showTooltip($event, breakdownTooltipHtml({{ dfs_breakdown | tojson }}, 'DFS Projection', {{ dfs_pts | tojson }}))"
+               @mouseleave="hideTooltip()">{{ "%.2f"|format(dfs_pts) }}</a>
+            {% else %}
+            <span class="summary-value">—</span>
+            {% endif %}
+        </div>
+        <div>
+            <span class="summary-label">Sportsbook Projection</span>
+            {% if betting_pts is not none and betting_breakdown %}
+            <a href="#sportsbook-markets" class="summary-value"
+               @mouseenter="showTooltip($event, breakdownTooltipHtml({{ betting_breakdown | tojson }}, 'Sportsbook Projection', {{ betting_pts | tojson }}))"
+               @mouseleave="hideTooltip()">{{ "%.2f"|format(betting_pts) }}</a>
+            {% else %}
+            <span class="summary-value">—</span>
+            {% endif %}
+        </div>
+        <div>
+            <span class="summary-label">Blended</span>
+            {% if blended is not none and blended_breakdown %}
+            <span class="summary-value hover-tag"
+                  @mouseenter="showTooltip($event, breakdownTooltipHtml({{ blended_breakdown | tojson }}, 'Blended (average)', {{ blended | tojson }}, 'Blended'))"
+                  @mouseleave="hideTooltip()">{{ "%.2f"|format(blended) }}</span>
+            {% else %}
+            <span class="summary-value">{{ "%.2f"|format(blended) if blended is not none else "—" }}</span>
+            {% endif %}
+        </div>
         {% if expert %}
         <div><span class="summary-label">Expert Perspective</span><span class="summary-value" style="font-size: 1rem;">{{ expert.label }}</span></div>
         {% endif %}
     </section>
 
-    <h2>DFS Projections</h2>
+    <h2 id="dfs-projections">DFS Projections</h2>
     {% if dfs_rows %}
     <div class="table-card">
         <table class="dfs-table">
             <thead><tr><th>Source</th><th>Projected Points</th></tr></thead>
             <tbody>
                 {% for row in dfs_rows %}
-                <tr><td>{{ dfs_source_labels.get(row.source, row.source) }}</td><td>{{ row.projected_points }}</td></tr>
+                <tr><td>{{ dfs_source_labels.get(row.source, row.source) }}</td><td>{{ "%.2f"|format(row.projected_points) }}</td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-    <p class="note" style="margin-top: 0.5rem;">Average of the sources above = {{ dfs_pts }}, feeding into the blend as the "DFS Projection" number.</p>
+    <p class="note" style="margin-top: 0.5rem;">Average of the sources above = {{ "%.2f"|format(dfs_pts) }}, feeding into the blend as the "DFS Projection" number.</p>
     {% else %}
     <p class="note">No DFS projections stored for this player/week.</p>
     {% endif %}
@@ -40,26 +84,48 @@
         {%- if o is none -%}—{%- else -%}{{ "+" if o > 0 else "" }}{{ o }}{%- endif -%}
     {%- endmacro %}
 
-    <h2>Sportsbook Markets</h2>
+    <h2 id="sportsbook-markets">Sportsbook Markets</h2>
     {% if markets %}
         {% for m in markets %}
         <div class="market-block" {% if m.thresholds and m.thresholds|length > 6 %}x-data="{ expanded: false }"{% endif %}>
             <h3>{{ m.label }}
                 <span class="market-summary">
-                    {% if m.method == "discrete" %}exact expected count{% elif m.method == "trapezoidal" %}market-curve estimate{% elif m.method == "legacy_probability" %}older data — averaged raw probability, no threshold detail stored{% else %}price-adjusted average (not enough threshold data for a curve){% endif %}
-                    &middot; {{ m.average }} &times; {{ m.rate }} pts = <strong>{{ m.points }} pts</strong>
+                    <span class="hover-tag" @mouseenter="showTooltip($event, {{ m.method_tooltip | tojson }})" @mouseleave="hideTooltip()">{{ m.method_label }}</span>
+                    &middot; {{ m.average }}{% if m.unit %} {{ m.unit }}{% endif %} &times; {{ m.rate }} pts{% if m.unit %}/{{ m.unit }}{% endif %} = <strong>{{ m.points }} pts</strong>
                 </span>
             </h3>
 
             {% if m.thresholds %}
             <table class="books-table">
-                <thead><tr><th>Threshold</th><th>P(actual &gt; threshold)</th><th>Books quoting it</th></tr></thead>
+                <thead>
+                    <tr>
+                        <th>Threshold</th>
+                        <th>Chance of Going Over
+                            <span class="info-icon" @mouseenter="showTooltip($event, 'Chance the actual result finishes above this threshold, based on real sportsbook odds.')" @mouseleave="hideTooltip()">ⓘ</span>
+                        </th>
+                        <th>Books Quoting It</th>
+                    </tr>
+                </thead>
                 <tbody>
                     {% for t in m.thresholds %}
                     <tr {% if m.thresholds|length > 6 %}x-show="expanded || {{ loop.index0 }} < 6"{% endif %}>
                         <td>{{ t.threshold }}</td>
-                        <td>{{ (t.probability * 100)|round(1) }}%</td>
-                        <td>{% if t.assumed %}<span class="note">assumed, not a real book</span>{% else %}{{ t.book_count }}{% endif %}</td>
+                        <td>
+                            <span class="hover-tag"
+                                  @mouseenter="showTooltip($event, {{ t.trend_tooltip | tojson }})"
+                                  @mouseleave="hideTooltip()">{{ (t.probability * 100)|round(1) }}%</span>
+                        </td>
+                        <td>
+                            {% if t.assumed %}
+                            <span class="note">assumed, not a real book</span>
+                            {% elif t.book_count > 0 %}
+                            <span class="hover-tag"
+                                  @mouseenter="showTooltip($event, booksTooltipHtml({{ t.books | tojson }}, 'Over {{ t.threshold }}{% if m.unit %} {{ m.unit }}{% endif %}'))"
+                                  @mouseleave="hideTooltip()">{{ t.book_count }}</span>
+                            {% else %}
+                            {{ t.book_count }}
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -69,10 +135,6 @@
                     @click="expanded = !expanded"
                     x-text="expanded ? 'Show fewer thresholds' : 'Show all {{ m.thresholds|length }} thresholds'"></button>
             {% endif %}
-            <p class="note" style="margin-top: 0.6rem;">
-                {% if m.method == "discrete" %}Sum of every threshold's probability above = the exact expected count for this stat — no distribution assumed, just adding market-implied probabilities.
-                {% else %}Trapezoidal estimate connecting these threshold probabilities, from an assumed P(actual &gt; 0) = 100% up through the highest threshold quoted; anything beyond the highest threshold is not counted (a small, one-directional underestimate).{% endif %}
-            </p>
             {% endif %}
 
             {% if m.books %}
@@ -104,5 +166,46 @@
     {% else %}
     <p class="note">No sportsbook props stored for this player/week.</p>
     {% endif %}
+
+    <div class="global-tooltip" :class="{ 'tooltip-visible': tooltipVisible, 'tooltip-above': tooltipAbove }"
+         x-ref="tooltip"
+         :style="`left:${tooltipX}px; top:${tooltipY}px;`"
+         x-html="tooltipText"></div>
 </div>
+
+<script>
+    function playerDetail() {
+        return {
+            tooltipVisible: false,
+            tooltipText: '',
+            tooltipX: 0,
+            tooltipY: 0,
+            tooltipAbove: false,
+            showTooltip(event, text) {
+                const rect = event.target.getBoundingClientRect();
+                this.tooltipText = text;
+                this.tooltipX = rect.left + rect.width / 2;
+                this.tooltipY = rect.bottom + 8;
+                this.tooltipAbove = false;
+                this.tooltipVisible = true;
+                // the tooltip is always rendered (opacity-only visibility, see
+                // .global-tooltip CSS), so its real height is measurable as
+                // soon as Alpine finishes patching the new x-html content —
+                // no animation-frame wait needed.
+                this.$nextTick(() => {
+                    const el = this.$refs.tooltip;
+                    if (!el) return;
+                    const h = el.getBoundingClientRect().height;
+                    if (rect.bottom + 8 + h > window.innerHeight) {
+                        this.tooltipY = rect.top - h - 8;
+                        this.tooltipAbove = true;
+                    }
+                });
+            },
+            hideTooltip() {
+                this.tooltipVisible = false;
+            },
+        };
+    }
+</script>
 {% endblock %}

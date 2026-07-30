@@ -5,7 +5,7 @@
 A website that helps fantasy football managers make weekly start/sit decisions by combining:
 - **DFS pick'em projections** (Underdog Fantasy, PrizePicks) — third-party projected fantasy point totals per player
 - **Sportsbook betting data** (player prop yardage lines, anytime-TD odds, game totals/spreads) — market-implied expectations for player performance
-- **Expert rankings** (The Athletic, and other fantasy sites) — qualitative, human-expert weekly rankings, used as a separate "expert perspective" lens rather than folded into the numeric projection
+- **Expert rankings** (FantasyPros Expert Consensus Rankings — see Section 4) — qualitative, human-expert weekly rankings, used as a separate "expert perspective" lens rather than folded into the numeric projection
 - **The site's own blended "expected fantasy points" number** and a **start/sit recommendation** per player, informed by both the quantitative blend and the expert-perspective lens
 
 The core idea: betting markets and DFS projection services are each independently pretty good at predicting player performance, and they don't always agree. Blending them (and showing *why* they disagree) should produce a better-informed decision than any single source alone. Expert rankings add a third, qualitative check — human analysts often factor in things (scheme fit, coaching tendencies, locker-room news) that don't show up cleanly in numbers, so they're kept as a separate signal rather than averaged into the math.
@@ -30,6 +30,12 @@ The core idea: betting markets and DFS projection services are each independentl
   - ~~A simple **Start / Sit / Toss-up** recommendation~~ — **removed 2026-07-29.** The recommendation compared the blended number to a flat, hardcoded per-position threshold that had no way to account for league format (team count, roster spots, PPR/superflex/etc.) — a 12-team-league "Start" could easily be a 10-team-league lock or a 14-team-league bench piece, and the tool had no way to know which. Rather than show a confident-looking badge built on an assumption that's wrong for most leagues, v1 now just shows the raw numbers (DFS projection, betting-derived estimate, blended) and lets the user apply their own league's context. See Section 5 below for the real fix path (compare against the user's actual Sleeper league roster instead of a flat threshold) — deferred, not abandoned.
 - Data refreshes automatically on a schedule (not manual re-entry) — see Section 4 on feasibility per source
 - Basic table/dashboard view, sortable by position and expected points
+- **Site structure (added 2026-07-29, see `PROJECT-PLAN.md` for full status):** grew from a single dashboard into
+  a 5-page site — Landing, Dashboard, Player detail (all live), plus Comparison and About/Methodology (still
+  placeholders as of this writing). Player detail shows a full per-market breakdown: pooled threshold curves
+  across every bookmaker, hoverable "chance of going over" trend history (Phase 3B — day-by-day probability
+  tracking, separate from the "historical accuracy tracking" idea listed under Later phases below), and
+  summary-box numbers that link/hover into the section that produced them.
 
 ### Later phases (not v1)
 - User accounts, saved rosters, league sync (Sleeper/ESPN/Yahoo import)
@@ -71,6 +77,12 @@ Official docs: `docs.sleeper.com`
 
 ### Estimated v1 monthly cost
 ~$30/mo (odds, once past free-tier development) + ~$6–13/mo (FantasyPros) ≈ **$36–43/month**, plus hosting (many options have a free or near-free tier for a project this size). Underdog/PrizePicks and Sleeper are $0. Nothing here should be signed up for automatically — decide and create these accounts yourself when ready to start building.
+
+**Update (2026-07-29, see `PROJECT-PLAN.md` decision D5 for the full breakdown):** the original $30/mo Odds API
+figure assumed the 20K-credit tier. The Phase 3B trend feature's pull cadence (hourly during game windows) needs
+~29K–84K credits/month, which doesn't fit that tier — **recommended $59/mo / 100K-credit tier for the season**
+instead. Purchase still pending owner confirmation as of this writing. Revised full-build estimate ≈ **$65–75/mo
+in-season** (odds + FantasyPros + hosting), lower off-season.
 
 ## 5. Expected Points Methodology (starting point — expect to refine)
 
@@ -119,5 +131,5 @@ Given "automated data + could go public later + move fast now":
 - The owner has no coding background — explain technical decisions in plain language, and avoid assuming familiarity with dev tools/terminology.
 - Bias toward shipping something functional over building the "ideal" architecture — v1 speed is the stated priority.
 - Treat Section 4 (data sourcing) as settled — the research is done. First real build task is setting up accounts/API keys for The Odds API and FantasyPros (owner does this personally, since it involves payment), then building the data pipeline against them.
-- This document is a living brief — as decisions get made (data providers chosen, formula tuned, etc.), it should be updated so future sessions stay in sync.
+- This document is a living brief — as decisions get made (data providers chosen, formula tuned, etc.), it should be updated so future sessions stay in sync. For day-to-day implementation status, open decisions, and a running log of what's been built, see `PROJECT-PLAN.md` instead — it's updated far more frequently than this brief and is the source of truth for "where things stand right now."
 - **Cost transparency:** there's no hard budget cap, but always flag pricing/subscription costs to the owner *before* signing up for or integrating a paid service — never assume a cost is acceptable just because there's no ceiling.

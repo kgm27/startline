@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Fantasy Football Start/Sit Advisor{% endblock %}
+{% block content %}
+<div class="page hero-page">
+    <section class="hero">
+        <span class="hero-eyebrow">Start/Sit Advisor</span>
+        <h1 class="hero-title">One score, blended from every angle.</h1>
+        <p class="hero-subtitle">
+            DFS projections, sportsbook betting lines, and expert consensus rankings — each
+            drawing on multiple sources of its own — blended into a single expected-points
+            number for every player, every week. No more tab-juggling to make one lineup call.
+        </p>
+        <div class="hero-actions">
+            <a href="/dashboard" class="btn-primary btn-lg">View the Dashboard &rarr;</a>
+            <a href="/about" class="btn btn-lg">How the blend works</a>
+        </div>
+    </section>
+
+    <section class="hero-features">
+        <div class="feature-card">
+            <span class="feature-kicker">DFS Projections</span>
+            <p>Underdog and PrizePicks projections, averaged into expected fantasy points.</p>
+        </div>
+        <div class="feature-card">
+            <span class="feature-kicker">Betting Lines</span>
+            <p>Sportsbook player-prop lines, converted into expected stat outcomes using
+                the market's own implied probabilities.</p>
+        </div>
+        <div class="feature-card">
+            <span class="feature-kicker">Expert Rankings</span>
+            <p>FantasyPros consensus expert rank, shown alongside the numbers as a
+                sanity-check perspective.</p>
+        </div>
+    </section>
+</div>
+{% endblock %}

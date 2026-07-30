@@ -20,6 +20,10 @@
 
 * { box-sizing: border-box; }
 
+html { scroll-behavior: smooth; }
+
+[x-cloak] { display: none !important; }
+
 body {
     font-family: var(--font-sans);
     background: var(--color-bg);
@@ -33,6 +37,74 @@ body {
     max-width: 1180px;
     margin: 0 auto;
     padding: 1.75rem 1.5rem 4rem;
+}
+
+/* ---------- Global nav ---------- */
+
+.nav {
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.nav-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0.85rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    color: var(--color-text);
+}
+
+.nav-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: var(--radius-sm);
+    background: var(--color-accent);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+}
+
+.nav-wordmark {
+    font-weight: 800;
+    font-size: 1.05rem;
+    letter-spacing: -0.01em;
+}
+
+.nav-links {
+    display: flex;
+    gap: 1.5rem;
+}
+
+.nav-links a {
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    font-size: 0.875rem;
+    font-weight: 600;
+    padding: 0.3rem 0.1rem;
+    border-bottom: 2px solid transparent;
+    transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.nav-links a:hover { color: var(--color-text); }
+.nav-links a.active { color: var(--color-accent); border-color: var(--color-accent); }
+
+@media (max-width: 640px) {
+    .nav-inner { padding: 0.75rem 1rem; }
+    .nav-links { gap: 1rem; }
 }
 
 /* ---------- Topbar ---------- */
@@ -76,6 +148,173 @@ body {
     gap: 0.75rem;
 }
 
+.league-format-picker {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.3rem;
+}
+
+.league-format-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-tertiary);
+}
+
+.league-format-picker select {
+    font-family: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    padding: 0.5rem 2rem 0.5rem 0.85rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 0.6rem center;
+    appearance: none;
+    box-shadow: var(--shadow-sm);
+    color: var(--color-text);
+    cursor: pointer;
+}
+.league-format-picker select:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.hover-tag {
+    border-bottom: 1px dashed var(--color-text-tertiary);
+    cursor: help;
+}
+
+.info-icon {
+    cursor: help;
+    color: var(--color-text-tertiary);
+    font-size: 0.85em;
+    margin-left: 0.15rem;
+}
+
+.team-badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    padding: 0.2rem 0.5rem;
+    border-radius: var(--radius-sm);
+}
+
+.global-tooltip {
+    position: fixed;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: 300px;
+    background: var(--color-text);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.45;
+    white-space: pre-line;
+    text-align: left;
+    padding: 0.55rem 0.75rem;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-lg);
+    pointer-events: none;
+    z-index: 50;
+    /* always rendered (never display:none) so its real height is always
+       measurable via getBoundingClientRect() the instant content changes —
+       visibility is a plain opacity toggle, not gated by a show/hide
+       transition, so positioning logic never has to wait on animation-frame
+       timing to know how tall it is */
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.global-tooltip.tooltip-visible {
+    opacity: 1;
+}
+
+.global-tooltip .tooltip-title {
+    font-weight: 700;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.6);
+    white-space: nowrap;
+    margin-bottom: 0.35rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.global-tooltip .tooltip-table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.global-tooltip .tooltip-table th {
+    background: none;
+    position: static;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: rgba(255, 255, 255, 0.45);
+    text-align: right;
+    padding: 0 0 0.2rem 0.9rem;
+}
+
+.global-tooltip .tooltip-table td {
+    padding: 0.15rem 0;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.global-tooltip .tooltip-table td:first-child,
+.global-tooltip .tooltip-table th:first-child {
+    color: rgba(255, 255, 255, 0.85);
+    padding-right: 1rem;
+    text-align: left;
+}
+
+.global-tooltip .tooltip-table td:nth-child(2) {
+    text-align: right;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    padding-left: 0.9rem;
+}
+
+.global-tooltip .tooltip-table td:last-child {
+    text-align: right;
+    color: rgba(255, 255, 255, 0.65);
+    font-variant-numeric: tabular-nums;
+    padding-left: 0.9rem;
+}
+
+.global-tooltip .tooltip-table tr.tooltip-total td {
+    border-top: 1px solid rgba(255, 255, 255, 0.18);
+    padding-top: 0.35rem;
+    margin-top: 0.15rem;
+    font-weight: 700;
+    color: #fff;
+}
+
+.global-tooltip::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-bottom-color: var(--color-text);
+}
+
+/* flipped when there's no room below the trigger — arrow moves to the
+   bottom of the bubble and points down instead of up */
+.global-tooltip.tooltip-above::before {
+    bottom: auto;
+    top: 100%;
+    border-bottom-color: transparent;
+    border-top-color: var(--color-text);
+}
+
 button, .btn {
     font-family: inherit;
     font-size: 0.875rem;
@@ -97,6 +336,98 @@ button:hover, .btn:hover { background: #fafafa; border-color: #d1d5db; }
     color: #fff;
 }
 .btn-primary:hover { background: var(--color-accent-hover); border-color: var(--color-accent-hover); }
+
+a.btn, a.btn-primary {
+    display: inline-block;
+    text-decoration: none;
+    line-height: 1.4;
+}
+
+.btn-lg {
+    font-size: 0.95rem;
+    padding: 0.8rem 1.5rem;
+}
+
+/* ---------- Landing page hero ---------- */
+
+.hero-page { padding-top: 3.5rem; }
+
+.hero {
+    max-width: 720px;
+    margin: 0 auto 3.5rem;
+    text-align: center;
+}
+
+.hero-eyebrow {
+    display: inline-block;
+    color: var(--color-accent);
+    background: var(--color-accent-light);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    margin-bottom: 1.25rem;
+}
+
+.hero-title {
+    font-size: 2.5rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+    margin: 0 0 1rem;
+}
+
+.hero-subtitle {
+    font-size: 1.05rem;
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+    margin: 0 auto 2rem;
+    max-width: 600px;
+}
+
+.hero-actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.85rem;
+    flex-wrap: wrap;
+}
+
+.hero-features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+.feature-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 1.4rem 1.5rem;
+}
+
+.feature-kicker {
+    display: block;
+    font-weight: 700;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.feature-card p {
+    color: var(--color-text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.55;
+    margin: 0;
+}
+
+@media (max-width: 640px) {
+    .hero-page { padding-top: 1.5rem; }
+    .hero-title { font-size: 1.85rem; }
+}
 
 /* ---------- Notices ---------- */
 
@@ -238,6 +569,13 @@ th {
     letter-spacing: 0.04em;
     color: var(--color-text-tertiary);
     user-select: none;
+}
+
+/* Sticky header only makes sense on the Dashboard's single long table —
+   the player-detail page has many short per-market tables, and a sticky
+   header on each one produces a stack of floating duplicate headers as
+   the page scrolls. */
+.dashboard-table th {
     position: sticky;
     top: 0;
 }
@@ -298,6 +636,15 @@ td.player-cell { white-space: normal; min-width: 140px; }
 }
 .summary-value { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.02em; }
 
+a.summary-value {
+    color: var(--color-text);
+    text-decoration: none;
+    border-bottom: 2px dashed var(--color-border);
+    width: fit-content;
+    cursor: pointer;
+}
+a.summary-value:hover { color: var(--color-accent); border-bottom-color: var(--color-accent); }
+
 h2 {
     font-size: 0.95rem;
     font-weight: 700;
@@ -305,6 +652,7 @@ h2 {
     letter-spacing: 0.03em;
     color: var(--color-text-secondary);
     margin: 2rem 0 0.75rem;
+    scroll-margin-top: 1.25rem;
 }
 
 .market-block {
@@ -331,10 +679,192 @@ h3 {
 .books-table { font-size: 0.82rem; }
 .books-table th, .books-table td { padding: 0.4rem 0.6rem; }
 
+.global-tooltip .sparkline {
+    display: block;
+    margin-top: 0.4rem;
+    overflow: visible;
+}
+
+.global-tooltip .spark-label {
+    font-size: 9px;
+    font-family: var(--font-sans);
+    fill: rgba(255, 255, 255, 0.55);
+}
+
 table.dfs-table td { white-space: normal; }
+
+/* ---------- Comparison page ---------- */
+
+.compare-pickers {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.compare-picker-col {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+}
+
+.compare-search { width: 100%; }
+.compare-search input { width: 100%; }
+
+.compare-swap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: 999px;
+    font-size: 1rem;
+    margin-top: 0.4rem;
+    flex-shrink: 0;
+}
+.compare-swap:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.combo-dropdown {
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    left: 0;
+    right: 0;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    max-height: 280px;
+    overflow-y: auto;
+    z-index: 20;
+    padding: 0.35rem;
+}
+
+.combo-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    box-shadow: none;
+    padding: 0.5rem 0.6rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-text);
+    cursor: pointer;
+}
+.combo-item:hover { background: var(--color-bg); }
+
+.combo-meta {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--color-text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.combo-empty {
+    padding: 0.6rem;
+    font-size: 0.8rem;
+    color: var(--color-text-tertiary);
+}
+
+.compare-selected {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    padding: 0.65rem 0.9rem;
+}
+
+.compare-selected-name { font-weight: 700; font-size: 0.95rem; }
+.compare-selected-meta {
+    font-size: 0.75rem;
+    color: var(--color-text-tertiary);
+    margin-top: 0.1rem;
+}
+
+.compare-change {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--color-accent);
+    background: none;
+    border: none;
+    box-shadow: none;
+    padding: 0.2rem 0.4rem;
+    cursor: pointer;
+}
+.compare-change:hover { text-decoration: underline; background: none; }
+
+.compare-table th, .compare-table td { text-align: center; }
+.compare-table th:first-child, .compare-table td:first-child {
+    text-align: left;
+    color: var(--color-text-secondary);
+    font-weight: 600;
+}
+.compare-table .compare-player-head {
+    padding-top: 0.9rem;
+    padding-bottom: 0.9rem;
+}
+.compare-table .compare-player-head a {
+    color: var(--color-text);
+    text-decoration: none;
+    font-size: 1rem;
+    font-weight: 800;
+}
+.compare-table .compare-player-head a:hover { color: var(--color-accent); }
+.compare-table .compare-player-head .compare-player-meta {
+    margin-top: 0.3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    color: var(--color-text-tertiary);
+    font-weight: 600;
+    text-transform: none;
+}
+
+.compare-table .compare-value { font-size: 1rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.compare-table tr.compare-row-blended .compare-value { font-size: 1.2rem; font-weight: 800; }
+.compare-table .compare-winner { color: var(--color-accent); }
+.compare-delta {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--color-accent);
+    margin-top: 0.1rem;
+}
+
+/* The whole column of whoever has the higher Blended score — the overall
+   "start this one" call — gets a light accent tint from header to footer,
+   separate from (and layered under) the per-row winner text color above. */
+.compare-table .compare-col-winner { background: var(--color-accent-light); }
+
+.compare-injury-flag {
+    display: inline-flex;
+    margin-top: 0.5rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #92400e;
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: help;
+}
 
 @media (max-width: 640px) {
     .page { padding: 1.25rem 1rem 3rem; }
     .search-box input { width: 100%; }
     .controls { flex-direction: column; align-items: stretch; }
+    .compare-pickers { flex-direction: column; align-items: stretch; }
+    .compare-swap { align-self: center; }
 }

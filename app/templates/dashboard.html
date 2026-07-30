@@ -5,99 +5,139 @@
     <header class="topbar">
         <div class="topbar-titles">
             <h1>Start/Sit Advisor</h1>
-            <p class="subtitle">Week {{ week }} &middot; Scoring: {{ scoring_format }}</p>
+            <p class="subtitle">Week {{ week }}</p>
         </div>
         <div class="topbar-actions">
-            <form action="/refresh" method="post">
-                <button type="submit" class="btn-primary">Refresh Data</button>
-            </form>
+            <div class="league-format-picker">
+                <label for="league-format" class="league-format-label">League Format</label>
+                <select id="league-format" x-model="leagueFormat">
+                    <option value="half_ppr">Half PPR</option>
+                    <option value="standard">Standard</option>
+                    <option value="full_ppr">Full PPR</option>
+                    <option value="superflex">Superflex</option>
+                    <option value="dynasty">Dynasty</option>
+                    <option value="best_ball">Best Ball</option>
+                </select>
+            </div>
         </div>
     </header>
 
-    {% if not odds_configured or not fantasypros_configured %}
-    <div class="notice">
-        {% if not odds_configured %}<p>Odds API key not set — betting-derived points and DFS (Underdog/PrizePicks) projections are unavailable until you add ODDS_API_KEY to .env.</p>{% endif %}
-        {% if not fantasypros_configured %}<p>FantasyPros API key not set — expert perspective is unavailable until you add FANTASYPROS_API_KEY to .env.</p>{% endif %}
+    {% if is_demo_week %}
+    <div class="note-banner">
+        Demo data — Week {{ week }}, 2025 season. This is a real backtest (not fabricated numbers), shown because
+        it's the off-season and there's no live week to display. Live data resumes once the season starts.
     </div>
     {% endif %}
 
-    {% if note %}
-    <div class="note-banner">{{ note }}</div>
-    {% endif %}
-
-    <div class="stat-cards">
-        <div class="stat-card">
-            <div class="stat-value">{{ summary.total }}</div>
-            <div class="stat-label">Players Tracked</div>
+    <div x-show="leagueFormat === 'half_ppr'" x-cloak>
+        {% if not odds_configured or not fantasypros_configured %}
+        <div class="notice">
+            {% if not odds_configured %}<p>Odds API key not set — sportsbook-projection points and DFS (Underdog/PrizePicks) projections are unavailable until you add ODDS_API_KEY to .env.</p>{% endif %}
+            {% if not fantasypros_configured %}<p>FantasyPros API key not set — expert perspective is unavailable until you add FANTASYPROS_API_KEY to .env.</p>{% endif %}
         </div>
-        <div class="stat-card">
-            <div class="stat-value">{{ summary.qb }}</div>
-            <div class="stat-label">QB</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">{{ summary.rb }}</div>
-            <div class="stat-label">RB</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">{{ summary.wr }}</div>
-            <div class="stat-label">WR</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">{{ summary.te }}</div>
-            <div class="stat-label">TE</div>
-        </div>
-    </div>
-
-    <div class="controls">
-        <div class="pill-filters">
-            <button type="button" class="pill" :class="{active: positionFilter === 'All'}" @click="positionFilter = 'All'">All</button>
-            <template x-for="pos in ['QB', 'RB', 'WR', 'TE']" :key="pos">
-                <button type="button" class="pill" :class="{active: positionFilter === pos}" @click="positionFilter = pos" x-text="pos"></button>
-            </template>
-        </div>
-        <div class="search-box">
-            <input type="text" placeholder="Search players or teams…" x-model="search">
-        </div>
-    </div>
-
-    <div class="table-card">
-        <table>
-            <thead>
-                <tr>
-                    <th class="sortable" :class="{sorted: sortKey === 'name'}" @click="sortBy('name')">Player <span class="sort-arrow" x-text="arrow('name')"></span></th>
-                    <th>Pos</th>
-                    <th>Team</th>
-                    <th>Injury</th>
-                    <th class="sortable" :class="{sorted: sortKey === 'dfs_pts'}" @click="sortBy('dfs_pts')">DFS Proj. <span class="sort-arrow" x-text="arrow('dfs_pts')"></span></th>
-                    <th class="sortable" :class="{sorted: sortKey === 'betting_pts'}" @click="sortBy('betting_pts')">Betting Est. <span class="sort-arrow" x-text="arrow('betting_pts')"></span></th>
-                    <th class="sortable" :class="{sorted: sortKey === 'blended'}" @click="sortBy('blended')">Blended <span class="sort-arrow" x-text="arrow('blended')"></span></th>
-                    <th>Expert</th>
-                </tr>
-            </thead>
-            <tbody>
-                <template x-for="row in filteredRows" :key="row.id">
-                    <tr>
-                        <td class="player-cell"><span class="player-name" x-text="row.name"></span></td>
-                        <td x-text="row.position"></td>
-                        <td x-text="row.team"></td>
-                        <td x-text="row.injury || '—'"></td>
-                        <td x-text="row.dfs_pts ?? '—'"></td>
-                        <td x-text="row.betting_pts ?? '—'"></td>
-                        <td><a class="blended-link" :href="'/player/' + row.id + '?week={{ week }}'" x-text="row.blended"></a></td>
-                        <td x-text="row.expert || '—'"></td>
-                    </tr>
-                </template>
-                <tr x-show="filteredRows.length === 0">
-                    <td colspan="8" class="empty-state">
-                        No players match your filters.
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-        {% if not rows %}
-        <p class="empty-state">No players with data yet for week {{ week }}. This is normal outside the near-term window before games — DFS/betting lines only post a few days before kickoff.</p>
         {% endif %}
+
+        {% if note %}
+        <div class="note-banner">{{ note }}</div>
+        {% endif %}
+
+        <div class="stat-cards">
+            <div class="stat-card">
+                <div class="stat-value">{{ summary.total }}</div>
+                <div class="stat-label">Players Tracked</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ summary.qb }}</div>
+                <div class="stat-label">QB</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ summary.rb }}</div>
+                <div class="stat-label">RB</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ summary.wr }}</div>
+                <div class="stat-label">WR</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ summary.te }}</div>
+                <div class="stat-label">TE</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="pill-filters">
+                <button type="button" class="pill" :class="{active: positionFilter === 'All'}" @click="positionFilter = 'All'">All</button>
+                <template x-for="pos in ['QB', 'RB', 'WR', 'TE']" :key="pos">
+                    <button type="button" class="pill" :class="{active: positionFilter === pos}" @click="positionFilter = pos" x-text="pos"></button>
+                </template>
+                <button type="button" class="pill" :class="{active: positionFilter === 'FLEX'}" @click="positionFilter = 'FLEX'">FLEX</button>
+            </div>
+            <div class="search-box">
+                <input type="text" placeholder="Search players or teams…" x-model="search">
+            </div>
+        </div>
+
+        <div class="table-card">
+            <table class="dashboard-table">
+                <thead>
+                    <tr>
+                        <th class="sortable" :class="{sorted: sortKey === 'name'}" @click="sortBy('name')">Player <span class="sort-arrow" x-text="arrow('name')"></span></th>
+                        <th>Pos</th>
+                        <th>Team</th>
+                        <th>Injury</th>
+                        <th class="sortable" :class="{sorted: sortKey === 'dfs_pts'}" @click="sortBy('dfs_pts')">DFS Proj. <span class="sort-arrow" x-text="arrow('dfs_pts')"></span></th>
+                        <th class="sortable" :class="{sorted: sortKey === 'betting_pts'}" @click="sortBy('betting_pts')">Sportsbook Proj. <span class="sort-arrow" x-text="arrow('betting_pts')"></span></th>
+                        <th class="sortable" :class="{sorted: sortKey === 'blended'}" @click="sortBy('blended')">Blended <span class="sort-arrow" x-text="arrow('blended')"></span></th>
+                        <th>Expert</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="row in filteredRows" :key="row.id">
+                        <tr>
+                            <td class="player-cell"><span class="player-name" x-text="row.name"></span></td>
+                            <td x-text="row.position"></td>
+                            <td><span class="team-badge" :style="teamStyle(row.team)" x-text="row.team"></span></td>
+                            <td>
+                                <template x-if="row.injury">
+                                    <span class="hover-tag"
+                                          @mouseenter="showTooltip($event, INJURY_DEFINITIONS[row.injury] || row.injury)"
+                                          @mouseleave="hideTooltip()"
+                                          x-text="row.injury"></span>
+                                </template>
+                                <template x-if="!row.injury">
+                                    <span>—</span>
+                                </template>
+                            </td>
+                            <td x-text="fmt1(row.dfs_pts)"></td>
+                            <td x-text="fmt1(row.betting_pts)"></td>
+                            <td><a class="blended-link" :href="'/player/' + row.id + '?week={{ week }}'" x-text="fmt1(row.blended)"></a></td>
+                            <td x-text="row.expert || '—'"></td>
+                        </tr>
+                    </template>
+                    <tr x-show="filteredRows.length === 0">
+                        <td colspan="8" class="empty-state">
+                            No players match your filters.
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            {% if not rows %}
+            <p class="empty-state">No players with data yet for week {{ week }}. This is normal outside the near-term window before games — DFS/betting lines only post a few days before kickoff.</p>
+            {% endif %}
+        </div>
     </div>
+
+    <div class="table-card" x-show="leagueFormat !== 'half_ppr'" x-cloak>
+        <p class="empty-state">
+            Only Half PPR is wired up right now — Standard, Full PPR, Superflex, Dynasty, and Best Ball support
+            is coming soon. Switch back to Half PPR above to see this week's numbers.
+        </p>
+    </div>
+
+    <div class="global-tooltip" :class="{ 'tooltip-visible': tooltipVisible, 'tooltip-above': tooltipAbove }"
+         x-ref="tooltip"
+         :style="`left:${tooltipX}px; top:${tooltipY}px;`"
+         x-html="tooltipText"></div>
 </div>
 
 <script>
@@ -108,9 +148,42 @@
         return {
             allRows: ALL_ROWS,
             positionFilter: INITIAL_POSITION,
+            leagueFormat: 'half_ppr',
             search: '',
             sortKey: 'blended',
             sortDir: 'desc',
+            tooltipVisible: false,
+            tooltipText: '',
+            tooltipX: 0,
+            tooltipY: 0,
+            tooltipAbove: false,
+            showTooltip(event, text) {
+                const rect = event.target.getBoundingClientRect();
+                this.tooltipText = text;
+                this.tooltipX = rect.left + rect.width / 2;
+                this.tooltipY = rect.bottom + 8;
+                this.tooltipAbove = false;
+                this.tooltipVisible = true;
+                // the tooltip is always rendered (opacity-only visibility, see
+                // .global-tooltip CSS), so its real height is measurable as
+                // soon as Alpine finishes patching the new x-html content —
+                // no animation-frame wait needed.
+                this.$nextTick(() => {
+                    const el = this.$refs.tooltip;
+                    if (!el) return;
+                    const h = el.getBoundingClientRect().height;
+                    if (rect.bottom + 8 + h > window.innerHeight) {
+                        this.tooltipY = rect.top - h - 8;
+                        this.tooltipAbove = true;
+                    }
+                });
+            },
+            hideTooltip() {
+                this.tooltipVisible = false;
+            },
+            fmt1(value) {
+                return value == null ? '—' : value.toFixed(1);
+            },
             sortBy(key) {
                 if (this.sortKey === key) {
                     this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
@@ -125,12 +198,18 @@
             },
             get filteredRows() {
                 let rows = this.allRows;
-                if (this.positionFilter !== 'All') {
+                if (this.positionFilter === 'FLEX') {
+                    rows = rows.filter(r => ['RB', 'WR', 'TE'].includes(r.position));
+                } else if (this.positionFilter !== 'All') {
                     rows = rows.filter(r => r.position === this.positionFilter);
                 }
                 const q = this.search.trim().toLowerCase();
                 if (q) {
-                    rows = rows.filter(r => r.name.toLowerCase().includes(q) || r.team.toLowerCase().includes(q));
+                    rows = rows.filter(r =>
+                        r.name.toLowerCase().includes(q)
+                        || r.team.toLowerCase().includes(q)
+                        || (TEAM_NAMES[r.team] || '').toLowerCase().includes(q)
+                    );
                 }
                 const key = this.sortKey, dir = this.sortDir === 'asc' ? 1 : -1;
                 return [...rows].sort((a, b) => {

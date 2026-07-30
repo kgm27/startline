@@ -7,10 +7,24 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="/static/app.js?v={{ app_js_version }}"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v={{ style_version }}">
 </head>
 <body>
+    <nav class="nav">
+        <div class="nav-inner">
+            <a class="nav-brand" href="/">
+                <span class="nav-logo">FF</span>
+                <span class="nav-wordmark">Advisor</span>
+            </a>
+            <div class="nav-links">
+                <a href="/dashboard" class="{{ 'active' if active_page == 'dashboard' else '' }}">Dashboard</a>
+                <a href="/compare" class="{{ 'active' if active_page == 'compare' else '' }}">Compare</a>
+                <a href="/about" class="{{ 'active' if active_page == 'about' else '' }}">About</a>
+            </div>
+        </div>
+    </nav>
     {% block content %}{% endblock %}
 </body>
 </html>
