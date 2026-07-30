@@ -1130,6 +1130,14 @@ def debug_info(x_refresh_token: str = Header(None)):
         "data_dir_contents": sorted(p.name for p in data_dir.iterdir()) if data_dir.exists() else None,
         "data_dir_is_mount": os.path.ismount(str(data_dir)),
         "project_root_contents": sorted(p.name for p in Path(__file__).resolve().parent.parent.iterdir()),
+        "suspect_dirs": {
+            str(p): {
+                "is_mount": os.path.ismount(str(p)),
+                "contents": sorted(x.name for x in p.iterdir()) if p.exists() and p.is_dir() else None,
+            }
+            for p in [Path(__file__).resolve().parent.parent / "data "]
+            if p.exists()
+        },
     }
 
 
