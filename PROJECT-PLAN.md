@@ -413,7 +413,9 @@ reads straight off that same curve (e.g. P(yards ≥ line + 30) is already in th
 *Goal: a real, public URL that loads the site.*
 
 - [ ] **6.1** Create the hosting account (per **D1**) and connect it to the GitHub repo. *(The repo isn't on GitHub
-      yet — pushing it up is part of this step.)*
+      yet — pushing it up is part of this step.)* GitHub half done: repo created at github.com/kgm27/startline
+      (public), pushed via a new SSH key generated on this machine (owner added the public key to their GitHub
+      account, no password ever handled by Claude). Render account creation/connection still to do.
 - [ ] **6.2** Configure environment variables on the host: `ODDS_API_KEY`, `FANTASYPROS_API_KEY`, `SCORING_FORMAT`,
       and the refresh secret from 5.1.
 - [ ] **6.3** Attach a persistent disk for the SQLite file (per **D4**) so data survives restarts/redeploys.
