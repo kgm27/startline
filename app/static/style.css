@@ -10,11 +10,15 @@
     --color-accent-hover: #4338ca;
     --color-accent-light: #eef2ff;
     --radius-sm: 6px;
-    --radius-md: 10px;
-    --radius-lg: 14px;
-    --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04);
-    --shadow-md: 0 2px 8px rgba(16, 24, 40, 0.06);
-    --shadow-lg: 0 8px 24px rgba(16, 24, 40, 0.08);
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    /* Cards rest flat against the page (no shadow) — separation comes from
+       the hairline border + the surface/bg contrast, not simulated depth.
+       Shadow is reserved for things that are genuinely floating above the
+       page (tooltips, dropdown menus), which still use --shadow-lg. */
+    --shadow-sm: none;
+    --shadow-md: 0 1px 2px rgba(16, 24, 40, 0.04);
+    --shadow-lg: 0 4px 16px rgba(16, 24, 40, 0.10);
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -596,25 +600,30 @@ a.btn, a.btn-primary {
 
 /* ---------- Stat summary cards ---------- */
 
+/* No card/border/shadow here on purpose — these numbers sit directly on
+   the page, like a brokerage app's balance figures, not boxed into little
+   dashboard tiles. A thin left divider (skipped on the first tile) is the
+   only separator between them. */
 .stat-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2.25rem;
+    margin-bottom: 2rem;
 }
 
 .stat-card {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    padding: 0.9rem 1.1rem;
-    box-shadow: var(--shadow-sm);
+    padding-left: 2.25rem;
+    border-left: 1px solid var(--color-border);
+}
+.stat-card:first-child {
+    padding-left: 0;
+    border-left: none;
 }
 
 .stat-card .stat-value {
-    font-size: 1.5rem;
+    font-size: 2.1rem;
     font-weight: 800;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.03em;
     line-height: 1.1;
 }
 
@@ -695,7 +704,16 @@ a.btn, a.btn-primary {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
-    overflow: hidden;
+    /* overflow-x: auto (not hidden) so a table wider than its card scrolls
+       horizontally on narrow screens instead of being clipped and made
+       invisible — this was the real mobile bug (Dashboard/Compare tables
+       have more columns than a phone screen fits). overflow-y stays
+       hidden purely to keep the table's square corners from poking out
+       past the card's rounded ones; content never overflows vertically
+       here, so it has no effect on scrolling. */
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
 }
 
 table {
@@ -748,13 +766,26 @@ td.player-cell { white-space: normal; min-width: 140px; }
     font-size: 0.85em;
 }
 
+/* Colored + a trailing chevron so this reads as "click through to the
+   player page" at a glance, rather than the same muted dashed-underline
+   language used elsewhere on the row for hover-only tooltips (which was
+   genuinely ambiguous: it looked like a definition, not a link). */
 .blended-link {
-    color: var(--color-text);
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.15rem;
+    color: var(--color-accent);
     text-decoration: none;
     font-weight: 700;
-    border-bottom: 1px dashed var(--color-text-tertiary);
 }
-.blended-link:hover { color: var(--color-accent); border-bottom-color: var(--color-accent); }
+.blended-link::after {
+    content: '\203a';
+    font-weight: 700;
+    color: var(--color-accent);
+    opacity: 0.55;
+}
+.blended-link:hover { color: var(--color-accent-hover); text-decoration: underline; }
+.blended-link:hover::after { opacity: 1; }
 
 .row-trend {
     display: inline-flex;
@@ -785,18 +816,24 @@ td.player-cell { white-space: normal; min-width: 140px; }
 
 /* ---------- Player detail page ---------- */
 
+/* Same "no card" treatment as the Dashboard's stat row — these are the
+   headline numbers for this player, not a boxed widget. */
 .summary-box {
     display: flex;
-    gap: 1.75rem;
+    gap: 2.25rem;
     flex-wrap: wrap;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
-    padding: 1.1rem 1.4rem;
-    margin: 0 0 1.5rem;
+    margin: 0 0 2rem;
 }
-.summary-box > div { display: flex; flex-direction: column; }
+.summary-box > div {
+    display: flex;
+    flex-direction: column;
+    padding-left: 2.25rem;
+    border-left: 1px solid var(--color-border);
+}
+.summary-box > div:first-child {
+    padding-left: 0;
+    border-left: none;
+}
 .summary-label {
     font-size: 0.7rem;
     color: var(--color-text-tertiary);
@@ -804,7 +841,7 @@ td.player-cell { white-space: normal; min-width: 140px; }
     font-weight: 700;
     letter-spacing: 0.04em;
 }
-.summary-value { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.02em; }
+.summary-value { font-size: 2.1rem; font-weight: 800; letter-spacing: -0.03em; }
 
 a.summary-value {
     color: var(--color-text);
@@ -884,7 +921,7 @@ h3 {
 }
 .market-summary { font-weight: 500; font-size: 0.8rem; color: var(--color-text-secondary); }
 
-.books-table { font-size: 0.82rem; }
+.books-table { font-size: 0.82rem; display: block; overflow-x: auto; }
 .books-table th, .books-table td { padding: 0.4rem 0.6rem; }
 
 .global-tooltip .sparkline {
@@ -934,6 +971,7 @@ h3 {
     color: rgba(255, 255, 255, 0.85);
 }
 
+table.dfs-table { display: block; overflow-x: auto; }
 table.dfs-table td { white-space: normal; }
 
 /* ---------- Comparison page ---------- */
@@ -1075,8 +1113,8 @@ table.dfs-table td { white-space: normal; }
     text-transform: none;
 }
 
-.compare-table .compare-value { font-size: 1rem; font-weight: 600; font-variant-numeric: tabular-nums; }
-.compare-table tr.compare-row-blended .compare-value { font-size: 1.2rem; font-weight: 800; }
+.compare-table .compare-value { font-size: 1.05rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.compare-table tr.compare-row-blended .compare-value { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em; }
 .compare-table .compare-winner { color: var(--color-accent); }
 .compare-delta {
     display: block;
@@ -1110,4 +1148,35 @@ table.dfs-table td { white-space: normal; }
     .controls { flex-direction: column; align-items: stretch; }
     .compare-pickers { flex-direction: column; align-items: stretch; }
     .compare-swap { align-self: center; }
+
+    /* The Dashboard's stat row and Player detail's summary numbers use a
+       left-border divider between items, which only makes sense in a
+       single horizontal line. On a narrow screen they wrap, and whichever
+       item lands first on a wrapped row keeps its left border with
+       nothing to its left, an orphaned line with no purpose. Stacking
+       them in a single column avoids that: each item is unambiguously
+       "first" on its own row, so a top-border (skipped on the very first
+       item) reads correctly no matter how many there are. */
+    .stat-cards, .summary-box {
+        flex-direction: column;
+        gap: 1.1rem;
+    }
+    .stat-card, .summary-box > div {
+        padding-left: 0;
+        border-left: none;
+        padding-top: 1.1rem;
+        border-top: 1px solid var(--color-border);
+    }
+    .stat-card:first-child, .summary-box > div:first-child {
+        padding-top: 0;
+        border-top: none;
+    }
+
+    /* Bigger tap targets: the pill filters, nav links, and league-format
+       select all measured well under Apple/Google's ~44px minimum on an
+       actual phone viewport. Padding only changes here, not font-size, so
+       desktop's denser look is untouched. */
+    .pill { padding: 0.85rem 1rem; }
+    .nav-links a { padding: 0.85rem 0.1rem; }
+    .league-format-picker select { padding: 0.85rem 2rem 0.85rem 0.85rem; }
 }

@@ -11,7 +11,7 @@
 
     {% if is_demo_week %}
     <div class="note-banner">
-        Demo data — Week {{ week }}, 2025 season. This is a real backtest (not fabricated numbers), shown because
+        Demo data: Week {{ week }}, 2025 season. This is a real backtest (not fabricated numbers), shown because
         it's the off-season and there's no live week to display. Live data resumes once the season starts.
     </div>
     {% endif %}
@@ -212,8 +212,8 @@
                 if (av == null || bv == null || av === bv) return null;
                 return av > bv ? 'A' : 'B';
             },
-            // The overall call — always decided by Blended, regardless of which
-            // individual metric a row highlights — used to tint the winner's
+            // The overall call, always decided by Blended regardless of which
+            // individual metric a row highlights, used to tint the winner's
             // whole column so it reads as "start this one" at a glance.
             overallWinner() {
                 return this.playerA && this.playerB ? this.winner('blended') : null;

@@ -34,12 +34,12 @@ const TEAM_NAMES = {
 };
 
 const INJURY_DEFINITIONS = {
-    Questionable: "Game-status designation — uncertain to play this week due to injury.",
-    Doubtful: "Game-status designation — unlikely to play this week due to injury.",
+    Questionable: "Game-status designation: uncertain to play this week due to injury.",
+    Doubtful: "Game-status designation: unlikely to play this week due to injury.",
     Out: "Ruled out for this week's game due to injury.",
-    IR: "Injured Reserve — sidelined and unavailable, typically for an extended stretch.",
-    PUP: "Physically Unable to Perform — started the year hurt and not yet cleared to practice.",
-    DNR: "Did Not Report — hasn't reported to the team (often a contract situation), not an on-field injury.",
+    IR: "Injured Reserve: sidelined and unavailable, typically for an extended stretch.",
+    PUP: "Physically Unable to Perform: started the year hurt and not yet cleared to practice.",
+    DNR: "Did Not Report: hasn't reported to the team (often a contract situation), not an on-field injury.",
     NA: "Not on the active roster this week for a non-injury reason (e.g., a roster exemption).",
 };
 
@@ -85,7 +85,7 @@ function fmtOdds(o) {
 }
 
 // Same raw (not de-vigged) conversion the server uses in
-// _pooled_survival_curve() — the "Chance of Going Over" percentage shown in
+// _pooled_survival_curve(): the "Chance of Going Over" percentage shown in
 // the main table is literally the average of this value across books, so a
 // per-book number here is directly consistent with it, not just a rough echo.
 function impliedProbability(americanOdds) {
@@ -123,7 +123,7 @@ function booksTooltipHtml(books, title) {
 // Builds a summary-box hover breakdown (e.g. what the Sportsbook Projection
 // number is composed of, market by market) with a final row showing how the
 // parts resolve to the headline number. totalLabel defaults to "Total" (the
-// parts are summed) — pass e.g. "Blended" when the parts are averaged
+// parts are summed), pass e.g. "Blended" when the parts are averaged
 // instead, so the row never implies arithmetic that isn't what happened.
 function breakdownTooltipHtml(items, title, total, totalLabel) {
     if (!items || !items.length) return '';

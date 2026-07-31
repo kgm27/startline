@@ -12,13 +12,13 @@ to make one lineup call.
 
 ## What it does
 
-- **Dashboard** — every tracked player's DFS projection, sportsbook-derived projection, and blended score in
+- **Dashboard**: every tracked player's DFS projection, sportsbook-derived projection, and blended score in
   one sortable, filterable, searchable table, with a 🚀 "high ceiling" badge for players whose betting markets
   imply unusual upside beyond their median projection.
-- **Player detail** — the full breakdown behind a player's numbers: every DFS site's projection, every
+- **Player detail**: the full breakdown behind a player's numbers: every DFS site's projection, every
   sportsbook's line for every stat market, and how each converts into expected fantasy points.
-- **Compare** — two players side by side, with the higher-scoring metric highlighted per row.
-- **About** — a plain-language walkthrough of the blending methodology, using a live-computed real example
+- **Compare**: two players side by side, with the higher-scoring metric highlighted per row.
+- **About**: a plain-language walkthrough of the blending methodology, using a live-computed real example
   (not a hardcoded illustration).
 
 ## How the blend works
@@ -28,7 +28,7 @@ to make one lineup call.
    full expected-value curve for that stat (e.g. rushing yards), then priced into fantasy points using the
    league's scoring rules.
 3. **Expert rankings** (FantasyPros consensus) provide a sanity-check perspective alongside the numbers.
-4. The DFS and sportsbook expected-points numbers are averaged into one **blended score** — the headline
+4. The DFS and sportsbook expected-points numbers are averaged into one **blended score**: the headline
    number the Dashboard sorts on by default.
 
 ## Stack

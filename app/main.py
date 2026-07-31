@@ -1,4 +1,5 @@
 """FastAPI app: the dashboard page plus a manual "refresh data" action."""
+import itertools
 import json
 import logging
 import os
@@ -55,7 +56,7 @@ def _client_ip(request):
     # real visitor IP arrives via X-Forwarded-For, not request.client.host
     # (which would otherwise be the proxy's own address). Each hop
     # *appends* its own observed address, so with exactly one trusted
-    # proxy in front, the LAST entry is the one Render itself recorded —
+    # proxy in front, the LAST entry is the one Render itself recorded:
     # everything before it came from the client's own (spoofable) header
     # and can't be trusted for rate limiting. Falls back to
     # request.client.host for local dev, where that header isn't set.
@@ -102,7 +103,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
 # Cache-busts /static/style.css and /static/app.js so a code change is never
-# masked by a stale cached copy (browser or intermediate proxy) — the query
+# masked by a stale cached copy (browser or intermediate proxy): the query
 # string changes whenever the file's contents change, forcing a fresh fetch.
 templates.env.globals["style_version"] = str(int(os.path.getmtime("app/static/style.css")))
 templates.env.globals["app_js_version"] = str(int(os.path.getmtime("app/static/app.js")))
@@ -140,7 +141,7 @@ def _error_page(request, status_code, heading, message):
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-    # Only 404s (a bad URL/player id) get the branded page — every other
+    # Only 404s (a bad URL/player id) get the branded page. Every other
     # HTTPException (400 bad ?week=, 401 on /refresh, etc.) keeps the
     # plain JSON `{"detail": ...}` response FastAPI would normally send,
     # since those are meaningful, safe-to-show messages already, not a
@@ -156,7 +157,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     # A genuine bug/crash: log the real error (with traceback) server-side
-    # only, never show it to a visitor — matches the same principle as the
+    # only, never show it to a visitor, matching the same principle as the
     # /refresh error-logging fix in Phase 5.4 (raw exception text can leak
     # internal details, so it never reaches an HTTP response body).
     logging.exception("Unhandled exception on %s %s", request.method, request.url.path)
@@ -199,24 +200,24 @@ STAT_UNITS = {
     "interceptions": "INT",
     "rush_rec_tds": "TD",
 }
-# (visible label, hover-tooltip explanation) per calculation method — the
+# (visible label, hover-tooltip explanation) per calculation method: the
 # tooltip carries the technical detail that used to sit in an always-visible
 # paragraph under every market block.
 METHOD_INFO = {
     "discrete": (
         "Exact count",
-        "Every threshold's probability adds up directly to the expected count — "
+        "Every threshold's probability adds up directly to the expected count, "
         "no distribution assumed, just market-implied probabilities added together.",
     ),
     "trapezoidal": (
         "Estimated from odds",
         "A curve connecting these threshold probabilities, assuming a 100% chance of "
         "at least zero up through the highest line quoted. Anything beyond the highest "
-        "threshold isn't counted — a small, one-directional underestimate.",
+        "threshold isn't counted: a small, one-directional underestimate.",
     ),
     "legacy_probability": (
         "Estimated (limited data)",
-        "Older data — averaged the raw market probability directly, since no threshold "
+        "Older data: averaged the raw market probability directly, since no threshold "
         "detail was stored for this stat yet.",
     ),
     "fallback": (
@@ -293,7 +294,7 @@ def _resolve_week(db, requested_week):
     (off-season, or before the first pull of a new season posts anything),
     fall back to the most recent week that actually has real data, so the
     site shows the Week 15 2025 backtest instead of a blank page. Returns
-    (week, is_demo) — is_demo is True whenever the displayed week isn't
+    (week, is_demo). is_demo is True whenever the displayed week isn't
     genuinely the current live week, so callers can show a "demo data"
     banner rather than silently passing off stale data as current."""
     if requested_week is not None and not (1 <= requested_week <= 30):
@@ -331,7 +332,7 @@ def _resolve_week(db, requested_week):
 
 
 def _thin_thresholds(items, min_gap=5):
-    """items: sorted [(threshold, probability), ...]. Display-only — picks a
+    """items: sorted [(threshold, probability), ...]. Display-only: picks a
     subset spaced >= min_gap apart so long lists (e.g. every alternate
     yardage line) don't overwhelm the page. Always keeps the first and last
     real threshold. Doesn't touch the expected-value math, which still uses
@@ -347,13 +348,16 @@ def _thin_thresholds(items, min_gap=5):
     return kept
 
 
+_chart_gradient_ids = itertools.count()
+
+
 def _trend_chart_svg(points, width=280, height=132, css_class="sparkline", value_fmt=None, max_value=None):
     """Shared renderer for both the real trend chart (once real history
     exists) and the illustrative placeholder mockup (before it does), so a
     preview looks exactly like the real thing. `points` is
     [(date_label, value), ...], oldest first, at least 2 entries. The
     y-axis is always scaled tightly around the data's own range (with some
-    headroom) rather than a fixed range — the same "let the real numbers
+    headroom) rather than a fixed range, the same "let the real numbers
     set the scale" approach used throughout this app. `value_fmt` controls
     how a raw value is printed on the axis (defaults to a 0-1 probability
     as a percentage); `max_value` optionally caps the top of the range
@@ -387,6 +391,27 @@ def _trend_chart_svg(points, width=280, height=132, css_class="sparkline", value
     path = " ".join(f"{x:.1f},{y:.1f}" for x, y in coords)
     dots = "".join(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.5"/>' for x, y in coords)
 
+    # A soft gradient fill under the line reads as a finished, "real" chart
+    # rather than a bare debug plot, the same treatment used by most
+    # consumer finance apps. Each chart needs its own gradient id since
+    # several of these SVGs can appear on one page (a shared id would mean
+    # every chart after the first reuses whichever gradient the browser
+    # resolves first).
+    gradient_id = f"chart-fill-{next(_chart_gradient_ids)}"
+    baseline_y = pad_top + chart_h
+    area_path = (
+        f"M {coords[0][0]:.1f},{coords[0][1]:.1f} "
+        + " ".join(f"L {x:.1f},{y:.1f}" for x, y in coords[1:])
+        + f" L {coords[-1][0]:.1f},{baseline_y:.1f} L {coords[0][0]:.1f},{baseline_y:.1f} Z"
+    )
+    area_fill = (
+        f'<defs><linearGradient id="{gradient_id}" x1="0" y1="0" x2="0" y2="1">'
+        f'<stop offset="0%" stop-color="currentColor" stop-opacity="0.22"/>'
+        f'<stop offset="100%" stop-color="currentColor" stop-opacity="0"/>'
+        f"</linearGradient></defs>"
+        f'<path d="{area_path}" fill="url(#{gradient_id})" stroke="none"/>'
+    )
+
     y_ticks = sorted({hi, (lo + hi) / 2, lo}, reverse=True)
     y_axis = "".join(
         f'<text x="{pad_left - 6}" y="{pad_top + chart_h - ((v - lo) / span) * chart_h + 3:.1f}" '
@@ -413,6 +438,7 @@ def _trend_chart_svg(points, width=280, height=132, css_class="sparkline", value
         f'<svg class="{css_class}" viewBox="0 0 {width} {height}" width="{width}" height="{height}">'
         f"{y_axis}"
         f'<line x1="{pad_left}" y1="{pad_top}" x2="{pad_left}" y2="{height - pad_bottom}" class="spark-axis-line"/>'
+        f"{area_fill}"
         f'<polyline points="{path}" fill="none" stroke="currentColor" stroke-width="2" '
         f'stroke-linecap="round" stroke-linejoin="round"/>'
         f'<g fill="currentColor">{dots}</g>'
@@ -485,7 +511,7 @@ def _placeholder_prediction_trend_svg(current_value, width=560, height=170):
 
 
 def _mini_sparkline_svg(history, width=64, height=22):
-    """A tiny, axis-free line for inline use in a Dashboard table cell —
+    """A tiny, axis-free line for inline use in a Dashboard table cell:
     the Player detail page's tooltip charts are too large to fit inline in
     a row, so this is a deliberately bare shape (no labels, no ticks) that
     just shows the direction of movement at a glance. `history` is
@@ -567,7 +593,7 @@ def _player_rows(db, week, scoring):
         blended = blend_expected_points(dfs_pts, betting_pts)
 
         if blended is None:
-            continue  # no data at all for this player yet — skip rather than show an empty row
+            continue  # no data at all for this player yet, skip rather than show an empty row
 
         expert_persp = expert_perspective(player.position, expert.position_rank if expert else None)
 
@@ -601,7 +627,7 @@ def _player_rows(db, week, scoring):
         })
 
     # "High ceiling" flag: top quartile of boom_prob within each position,
-    # not a fixed cutoff — what counts as unusual upside is relative to
+    # not a fixed cutoff, since what counts as unusual upside is relative to
     # that week's own market data, and a fixed number would drift in
     # meaning as the underlying odds/margin math gets refined later.
     # Skipped for a position entirely when too few players have a real
@@ -660,7 +686,7 @@ def dashboard(request: Request, week: int = None, position: str = None, note: st
     scoring = SCORING_RULES.get(settings.scoring_format, SCORING_RULES["half_ppr"])
 
     # Position filtering/search/sort all happen client-side (see dashboard.html)
-    # for a snappy no-reload experience, so this always loads every position —
+    # for a snappy no-reload experience, so this always loads every position:
     # `position` is only used to seed which pill starts active.
     rows = _player_rows(db, week, scoring)
 
@@ -734,7 +760,7 @@ def about(request: Request, db: Session = Depends(get_db)):
     week, is_demo_week = _resolve_week(db, None)
     scoring = SCORING_RULES.get(settings.scoring_format, SCORING_RULES["half_ppr"])
 
-    # A real, live worked example beats a made-up one — this week's #1
+    # A real, live worked example beats a made-up one: this week's #1
     # blended score, whoever that happens to be, so the walkthrough below
     # always points at genuine (not fabricated) numbers a reader can click
     # into and verify on that player's own page.
@@ -754,7 +780,7 @@ def about(request: Request, db: Session = Depends(get_db)):
 @app.get("/player/{player_id}")
 def player_detail(request: Request, player_id: str, week: int = None, db: Session = Depends(get_db)):
     """Shows exactly what fed into a player's blended score: each DFS site's
-    number separately, and every sportsbook's line for every market —
+    number separately, and every sportsbook's line for every market,
     not just the single averaged numbers shown on the dashboard."""
     settings = get_settings()
     week, is_demo_week = _resolve_week(db, week)
@@ -810,7 +836,7 @@ def player_detail(request: Request, player_id: str, week: int = None, db: Sessio
 
         if curve and (stat in NO_FALLBACK_STATS or len(curve) >= MIN_THRESHOLDS_FOR_CURVE):
             method = "discrete" if stat in DISCRETE_COUNT_STATS else "trapezoidal"
-            # decide richness from real market data only, THEN anchor —
+            # decide richness from real market data only, THEN anchor:
             # matches betting_derived_points() exactly, so what's displayed
             # is always what was actually used to compute the score
             curve = _apply_stat_anchors(curve, stat)
@@ -852,7 +878,7 @@ def player_detail(request: Request, player_id: str, week: int = None, db: Sessio
                 display_items = _thin_thresholds(display_items)
             # the receptions "first catch" threshold is a deliberate
             # assumption (RECEPTIONS_FIRST_CATCH_ANCHOR), not a real market
-            # quote — expected_count above already used it, so the math is
+            # quote, expected_count above already used it, so the math is
             # unaffected by leaving it out of what's actually displayed
             if stat == "receptions":
                 display_items = [
@@ -892,7 +918,7 @@ def player_detail(request: Request, player_id: str, week: int = None, db: Sessio
                 })
         elif stat in NO_FALLBACK_STATS:
             # Older rows (pre-2026-07-28) never recorded a "line" for
-            # rush_rec_tds, so there's no threshold curve to build — fall
+            # rush_rec_tds, so there's no threshold curve to build, fall
             # back to directly averaging the raw implied_probability values,
             # same as betting_derived_points()'s legacy path.
             method = "legacy_probability"
@@ -1006,8 +1032,8 @@ def capture_threshold_snapshots(db: Session, week: int) -> int:
     """Writes one ThresholdSnapshot row per (player, stat, threshold) that
     has real curve data for `week`, so the Player detail page can eventually
     chart how each threshold's "Chance of Going Over" moved across pulls.
-    A same-day refresh updates today's row rather than piling up duplicates
-    — one reading per day, matching the plan's daily-snapshot cadence.
+    A same-day refresh updates today's row rather than piling up duplicates,
+    one reading per day, matching the plan's daily-snapshot cadence.
     Skips stats without enough threshold data for a curve (the same gate
     betting_derived_points() uses) since there's no per-threshold
     probability to snapshot in that case. Returns rows written/updated."""

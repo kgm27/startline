@@ -24,7 +24,7 @@
 
     {% if is_demo_week %}
     <div class="note-banner">
-        Demo data — Week {{ week }}, 2025 season. This is a real backtest (not fabricated numbers), shown because
+        Demo data: Week {{ week }}, 2025 season. This is a real backtest (not fabricated numbers), shown because
         it's the off-season and there's no live week to display. Live data resumes once the season starts.
     </div>
     {% endif %}
@@ -32,8 +32,8 @@
     <div x-show="leagueFormat === 'half_ppr'" x-cloak>
         {% if not odds_configured or not fantasypros_configured %}
         <div class="notice">
-            {% if not odds_configured %}<p>Odds API key not set — sportsbook-projection points and DFS (Underdog/PrizePicks) projections are unavailable until you add ODDS_API_KEY to .env.</p>{% endif %}
-            {% if not fantasypros_configured %}<p>FantasyPros API key not set — expert perspective is unavailable until you add FANTASYPROS_API_KEY to .env.</p>{% endif %}
+            {% if not odds_configured %}<p>Odds API key not set: sportsbook-projection points and DFS (Underdog/PrizePicks) projections are unavailable until you add ODDS_API_KEY to .env.</p>{% endif %}
+            {% if not fantasypros_configured %}<p>FantasyPros API key not set: expert perspective is unavailable until you add FANTASYPROS_API_KEY to .env.</p>{% endif %}
         </div>
         {% endif %}
 
@@ -77,7 +77,7 @@
             </div>
         </div>
 
-        <p class="boom-legend">🚀 High ceiling — hover the badge next to a player's name for the odds behind it</p>
+        <p class="boom-legend">🚀 High ceiling: hover the badge next to a player's name for the odds behind it</p>
 
         <div class="table-card">
             <table class="dashboard-table">
@@ -135,14 +135,14 @@
                 </tbody>
             </table>
             {% if not rows %}
-            <p class="empty-state">No players with data yet for week {{ week }}. This is normal outside the near-term window before games — DFS/betting lines only post a few days before kickoff.</p>
+            <p class="empty-state">No players with data yet for week {{ week }}. This is normal outside the near-term window before games. DFS/betting lines only post a few days before kickoff.</p>
             {% endif %}
         </div>
     </div>
 
     <div class="table-card" x-show="leagueFormat !== 'half_ppr'" x-cloak>
         <p class="empty-state">
-            Only Half PPR is wired up right now — Standard, Full PPR, Superflex, Dynasty, and Best Ball support
+            Only Half PPR is wired up right now. Standard, Full PPR, Superflex, Dynasty, and Best Ball support
             is coming soon. Switch back to Half PPR above to see this week's numbers.
         </p>
     </div>
@@ -181,7 +181,7 @@
                 this.tooltipVisible = true;
                 // the tooltip is always rendered (opacity-only visibility, see
                 // .global-tooltip CSS), so its real height is measurable as
-                // soon as Alpine finishes patching the new x-html content —
+                // soon as Alpine finishes patching the new x-html content,
                 // no animation-frame wait needed.
                 this.$nextTick(() => {
                     const el = this.$refs.tooltip;
@@ -196,7 +196,7 @@
             // The boom badge sits right next to the player's name in the
             // table's leftmost column, so the default centered-below layout
             // gets clipped by the viewport/table edge for short names (e.g.
-            // "Joe Burrow") — this variant anchors to the badge's right side
+            // "Joe Burrow"). This variant anchors to the badge's right side
             // instead, only falling back to the left if there's truly no
             // room (e.g. a very narrow window).
             showTooltipRight(event, text) {

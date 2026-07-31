@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ player.name }} — Week {{ week }} breakdown{% endblock %}
+{% block title %}{{ player.name }} - Week {{ week }} breakdown{% endblock %}
 {% block content %}
 <div class="page" x-data="playerDetail()">
     <header class="topbar">
@@ -22,7 +22,7 @@
 
     {% if is_demo_week %}
     <div class="note-banner">
-        Demo data — Week {{ week }}, 2025 season. This is a real backtest (not fabricated numbers), shown because
+        Demo data: Week {{ week }}, 2025 season. This is a real backtest (not fabricated numbers), shown because
         it's the off-season and there's no live week to display. Live data resumes once the season starts.
     </div>
     {% endif %}
@@ -192,7 +192,7 @@
                         <td>{{ book.line }}</td>
                         <td>{{ fmt_odds(book.odds) }}</td>
                         <td>{{ fmt_odds(book.under_odds) }}</td>
-                        <td>{{ book.effective_line }}{% if book.under_odds is none %} <span class="note">(no Under price — using raw line)</span>{% endif %}</td>
+                        <td>{{ book.effective_line }}{% if book.under_odds is none %} <span class="note">(no Under price, using raw line)</span>{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -230,7 +230,7 @@
                 this.tooltipVisible = true;
                 // the tooltip is always rendered (opacity-only visibility, see
                 // .global-tooltip CSS), so its real height is measurable as
-                // soon as Alpine finishes patching the new x-html content —
+                // soon as Alpine finishes patching the new x-html content,
                 // no animation-frame wait needed.
                 this.$nextTick(() => {
                     const el = this.$refs.tooltip;

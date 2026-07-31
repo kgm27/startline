@@ -483,7 +483,11 @@ a cheap **daily** headline pull (feeds the Phase 3B trend chart) and the fuller 
 
 ## Phase 9 — Launch
 
-- [ ] **9.1** Final review of the live site on desktop.
+- [x] **9.1** Final review of the live site on desktop. Done: walked through Landing, Dashboard, a Player detail
+      page (Josh Allen, including the trend chart and threshold tables), Compare, and About on `getstartline.com`
+      — all render correctly, no console errors on any page. Also confirmed the branded 404 page works on the
+      custom domain, the SSL certificate is valid (Google Trust Services, auto-renewing, valid through Oct 2026),
+      and `www.getstartline.com` still correctly redirects to the canonical domain.
 - [ ] **9.2** Add the link to your resume / portfolio / LinkedIn.
 - [ ] **9.3** Note the live URL and any host/login details somewhere safe.
 
@@ -491,13 +495,32 @@ a cheap **daily** headline pull (feeds the Phase 3B trend chart) and the fuller 
 
 ## Phase 10 — Mobile polish *(optional, after launch)*
 
-*Goal: the site also looks and works well on a phone. Not required for the resume — do it only if you want it.*
+*Goal: the site also looks and works well on a phone. Not required for the resume, do it only if you want it.*
 
-- [ ] **10.1** Check every page on a phone-sized screen (Landing, Dashboard, Player detail, Comparison, About).
-- [ ] **10.2** Fix the most likely trouble spots: the wide data tables (make them scroll or stack), the nav bar,
-      and the comparison side-by-side layout (may need to stack vertically on narrow screens).
-- [ ] **10.3** Confirm tap targets (buttons, filters, links) are big enough to use with a thumb.
-- [ ] **10.4** Re-test on desktop to make sure the mobile fixes didn't break the desktop layout.
+- [x] **10.1** Check every page on a phone-sized screen (Landing, Dashboard, Player detail, Comparison, About).
+      Done: audited all five at a real 375px mobile viewport (not guessed). Landing and About already worked fine
+      (simple stacked prose/cards). Found two real bugs on Dashboard, Player detail, and Compare, fixed in 10.2.
+- [x] **10.2** Fix the most likely trouble spots: the wide data tables (make them scroll or stack), the nav bar,
+      and the comparison side-by-side layout (may need to stack vertically on narrow screens). Done, two real bugs
+      found and fixed: (1) `.table-card` (wrapping both the Dashboard and Compare tables) had `overflow: hidden`,
+      which was silently clipping the DFS/Sportsbook/Blended/Expert columns off-screen on a phone, not just
+      pushing them off-screen-but-reachable. Changed to `overflow-x: auto` so the table now swipe-scrolls
+      horizontally instead; same defensive fix applied to Player detail's per-market tables. (2) The Dashboard's
+      stat row and Player detail's summary numbers use a left-border divider between items, which broke when the
+      row wrapped on a narrow screen: whatever item wrapped to a new line kept an orphaned left border with
+      nothing before it. Fixed by stacking them in a single column on mobile with a top-border instead, where
+      "first item" is unambiguous. The Comparison page's picker/stacking behavior already worked from earlier
+      responsive CSS. Nav bar already wrapped fine, no changes needed there.
+- [x] **10.3** Confirm tap targets (buttons, filters, links) are big enough to use with a thumb. Done: measured
+      actual rendered heights on a mobile viewport rather than guessing. Position-filter pills (~28px), nav links
+      (~29px), and the League Format select (~35px) were all under Apple/Google's ~44px minimum. Bumped padding
+      (mobile-only, via media query, no change to desktop sizing) to bring all three to 43-46px. Verified with
+      real measurements after the fix.
+- [x] **10.4** Re-test on desktop to make sure the mobile fixes didn't break the desktop layout. Done: confirmed
+      at 1280px width that the stat row and summary numbers stay horizontal with their original left-border
+      dividers (the mobile stacking/top-border rule is scoped to the same max-width: 640px media query as the
+      rest of the site's mobile overrides), and the Dashboard/Compare tables still show every column without a
+      scrollbar at that width.
 
 ---
 
@@ -773,3 +796,21 @@ a cheap **daily** headline pull (feeds the Phase 3B trend chart) and the fuller 
   safe/meaningful, not a leak). Unhandled crashes are logged server-side with the full traceback and show
   visitors a generic branded 500 page. Verified live with a temporary crash route: confirmed no exception detail
   leaked into the response body, then removed the test route. Owner confirmed 2026-07-30, checked off.
+- 2026-07-31 — Owner said the site "looks completely AI-generated" and shared Robinhood screenshots as the target
+  feel. First pass (removing the already-very-faint card shadow) was too subtle to notice. Real fix: removed the
+  boxed-card treatment entirely from the Dashboard's stat row and Player detail's summary numbers (numbers now
+  sit directly on the page with a thin divider, not in little bordered tiles, since a "everything in a rounded
+  card" pattern is itself a hallmark of generic templated UIs), sized those numbers up further, and added a soft
+  gradient fill under every trend-chart line (verified on both the light Player detail card and the dark tooltip
+  background) so charts read as finished rather than a bare debug plot. Also fixed the Blended score's click
+  affordance (owner flagged it wasn't obvious it was clickable): it used the same muted dashed-underline style as
+  the page's hover-only tooltips, genuinely ambiguous. Now bold + accent-colored with a trailing chevron, visually
+  distinct from anything hover-only on the page.
+- 2026-07-31 — Owner flagged an em dash appearing when switching League Format on the Dashboard (a standing site
+  rule, no em dashes anywhere). Fixed that instance, then found the rule was actually violated much more broadly
+  (~60 instances built up across earlier sessions before it became a hard rule). Owner asked for a full sweep:
+  every prose/comment em dash across all templates, `app.js`, `main.py`, and `README.md` replaced with a comma,
+  period, or colon as fit each sentence. Left the "—" placeholder glyph used for missing table values as-is (a
+  UI convention, not prose, a deliberate judgment call flagged to the owner rather than silently decided).
+  `PROJECT-PLAN.md`'s own historical log entries (~130 instances across many past sessions) were left alone,
+  out of scope for this pass since it's an internal doc, not something site visitors see.
