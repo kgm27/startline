@@ -5,9 +5,8 @@ import os
 import secrets
 import time
 from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
 
-from fastapi import FastAPI, Request, Depends, HTTPException, Header, UploadFile, File
+from fastapi import FastAPI, Request, Depends, HTTPException, Header
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -1106,57 +1105,6 @@ def capture_prediction_snapshots(db: Session, week: int) -> int:
 
     db.commit()
     return written
-
-
-@app.get("/admin/debug-info")
-def debug_info(x_refresh_token: str = Header(None)):
-    """TEMPORARY diagnostic for Phase 6.5: the production database went
-    empty after a redeploy, meaning the persistent disk likely isn't
-    mounted where the app expects. Reports the exact path/cwd/disk state
-    so the mismatch can be found instead of guessed at. Remove after."""
-    settings = get_settings()
-    if not settings.refresh_secret or not secrets.compare_digest(x_refresh_token or "", settings.refresh_secret):
-        raise HTTPException(status_code=401, detail="Missing or invalid X-Refresh-Token header")
-    db_path = Path(settings.db_path)
-    data_dir = db_path.parent
-    return {
-        "cwd": os.getcwd(),
-        "__file___resolved": str(Path(__file__).resolve()),
-        "db_path": str(db_path),
-        "db_exists": db_path.exists(),
-        "db_size_bytes": db_path.stat().st_size if db_path.exists() else None,
-        "data_dir": str(data_dir),
-        "data_dir_exists": data_dir.exists(),
-        "data_dir_contents": sorted(p.name for p in data_dir.iterdir()) if data_dir.exists() else None,
-        "data_dir_is_mount": os.path.ismount(str(data_dir)),
-        "project_root_contents": sorted(p.name for p in Path(__file__).resolve().parent.parent.iterdir()),
-        "suspect_dirs": {
-            repr(p.name): {
-                "is_mount": os.path.ismount(str(p)),
-                "contents": sorted(x.name for x in p.iterdir()) if p.is_dir() else None,
-            }
-            for p in Path(__file__).resolve().parent.parent.iterdir()
-            if p.name.strip() == "data" and p.name != "data"
-        },
-    }
-
-
-@app.post("/admin/upload-db")
-async def upload_db(file: UploadFile = File(...), x_refresh_token: str = Header(None)):
-    """TEMPORARY, Phase 6.5 (re-added): the first disk mount had a stray
-    trailing space in its path, so this seeds the corrected disk. Same
-    auth pattern as /refresh. Remove once persistence is verified."""
-    settings = get_settings()
-    if not settings.refresh_secret or not secrets.compare_digest(x_refresh_token or "", settings.refresh_secret):
-        raise HTTPException(status_code=401, detail="Missing or invalid X-Refresh-Token header")
-    contents = await file.read()
-    tmp_path = settings.db_path + ".upload_tmp"
-    with open(tmp_path, "wb") as f:
-        f.write(contents)
-    os.replace(tmp_path, settings.db_path)
-    engine.dispose()
-    _PLAYER_ROWS_CACHE.clear()
-    return {"status": "ok", "bytes_written": len(contents)}
 
 
 @app.post("/refresh")
