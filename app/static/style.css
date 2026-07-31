@@ -350,6 +350,24 @@ body {
     border-top-color: var(--color-text);
 }
 
+/* Side-anchored variant (e.g. the boom badge): the badge sits at the left
+   edge of the table, so centering the tooltip under it (the default) gets
+   clipped by the viewport for short names. This positions the tooltip to
+   the badge's right instead, with the arrow on its left edge pointing
+   back at the badge, no horizontal centering transform since tooltipX is
+   already the exact edge coordinate computed in JS. */
+.global-tooltip.tooltip-side {
+    transform: none;
+}
+.global-tooltip.tooltip-side::before {
+    top: 50%;
+    bottom: auto;
+    left: -5px;
+    transform: translateY(-50%);
+    border-bottom-color: transparent;
+    border-right-color: var(--color-text);
+}
+
 button, .btn {
     font-family: inherit;
     font-size: 0.875rem;

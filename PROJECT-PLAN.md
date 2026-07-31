@@ -412,16 +412,34 @@ reads straight off that same curve (e.g. P(yards ≥ line + 30) is already in th
 
 *Goal: a real, public URL that loads the site.*
 
-- [ ] **6.1** Create the hosting account (per **D1**) and connect it to the GitHub repo. *(The repo isn't on GitHub
-      yet — pushing it up is part of this step.)* GitHub half done: repo created at github.com/kgm27/startline
-      (public), pushed via a new SSH key generated on this machine (owner added the public key to their GitHub
-      account, no password ever handled by Claude). Render account creation/connection still to do.
-- [ ] **6.2** Configure environment variables on the host: `ODDS_API_KEY`, `FANTASYPROS_API_KEY`, `SCORING_FORMAT`,
-      and the refresh secret from 5.1.
-- [ ] **6.3** Attach a persistent disk for the SQLite file (per **D4**) so data survives restarts/redeploys.
-- [ ] **6.4** First deploy. Watch the build/boot logs; fix and redeploy as needed.
-- [ ] **6.5** Seed the production database (run the refresh/seed once, or upload the existing `advisor.db`).
-- [ ] **6.6** Smoke-test the live URL: every page loads, filters/sort/search work, comparison works.
+- [x] **6.1** Create the hosting account (per **D1**) and connect it to the GitHub repo. *(The repo isn't on GitHub
+      yet — pushing it up is part of this step.)* Done: repo created at github.com/kgm27/startline (public),
+      pushed via a new SSH key generated on this machine (owner added the public key to their GitHub account, no
+      password ever handled by Claude). Render account created by owner (payment/account creation is owner-only,
+      Claude never handles card details or passwords), connected to the GitHub repo, Starter plan (~$7/mo, per D1).
+- [x] **6.2** Configure environment variables on the host: `ODDS_API_KEY`, `FANTASYPROS_API_KEY`, `SCORING_FORMAT`,
+      and the refresh secret from 5.1. Done: owner copied all 4 values from the local `.env` into Render's
+      Environment Variables screen before the first deploy.
+- [x] **6.3** Attach a persistent disk for the SQLite file (per **D4**) so data survives restarts/redeploys. Done,
+      after a real snag: the first disk was created with a mount path that had a stray trailing space
+      (`/opt/render/project/src/data ` instead of `.../data`), so the app's own hardcoded path (no space) actually
+      pointed at the container's throwaway filesystem, not the disk, every redeploy silently wiped it. Found via a
+      temporary diagnostic endpoint (added, used, then removed) that dumped the real cwd/mount state rather than
+      guessing. Render doesn't allow editing a disk's mount path after creation, so the fix was deleting the
+      (empty, unused) disk and recreating it with the exact path. Verified correct via the diagnostic endpoint
+      (`data_dir_is_mount: true`, no trailing-space duplicate) before trusting it.
+- [x] **6.4** First deploy. Watch the build/boot logs; fix and redeploy as needed. Done: build succeeded first try
+      once the Start Command (`uvicorn app.main:app --host 0.0.0.0 --port $PORT`) was pasted into Render's form
+      (Render doesn't auto-read the repo's `Procfile` for this). Site went live at startline.onrender.com.
+- [x] **6.5** Seed the production database (run the refresh/seed once, or upload the existing `advisor.db`). Done,
+      via a temporary `POST /admin/upload-db` endpoint (gated by the same `X-Refresh-Token`/`REFRESH_SECRET` auth
+      as `/refresh`), added, used twice (once before the disk-mount fix, once after), then removed both times —
+      avoided spending Odds API credits on a fresh production pull and avoided setting up SSH/CLI access. The
+      real test was pushing a code change (removing the endpoint) and confirming the 374-player Week 15 dataset
+      survived that redeploy, which it did.
+- [x] **6.6** Smoke-test the live URL: every page loads, filters/sort/search work, comparison works. Done: `/`,
+      `/dashboard`, `/compare`, `/about` all return 200 live, Dashboard shows the real 374-player Week 15 demo
+      dataset with the boom-badge legend, and both temporary admin endpoints confirmed gone (404) from production.
 
 ## Phase 7 — Automate data refresh (mostly in-season)
 
@@ -694,6 +712,34 @@ a cheap **daily** headline pull (feeds the Phase 3B trend chart) and the fuller 
   wouldn't know to check it. Added a small caption line above the Dashboard table: "🚀 High ceiling — hover the
   badge next to a player's name for the odds behind it." Player detail's boom callout wasn't touched since it's
   already an always-visible sentence, no legend needed there. Verified live via screenshot.
+- 2026-07-30 — Owner reported the boom-badge ("High Ceiling") hover tooltip was clipped off the left edge for
+  short names like Joe Burrow — the default tooltip layout centers itself under the trigger element, and the
+  badge sits near the table's left edge, so a 320px-wide tooltip centered there ran off-screen to the left. Added
+  a dedicated `showTooltipRight()` positioning method (Dashboard's the only place this badge shows as a hover;
+  Player detail's boom callout is already always-visible text, not a hover, so it didn't need this) that anchors
+  the tooltip to the badge's right side instead, with a small left-pointing arrow, falling back to the left only
+  if a very narrow window leaves no room on the right. Every other tooltip (injury, method info, threshold
+  trends) is untouched, confirmed via the existing `showTooltip()` still producing the same centered-below layout.
+  Verified live on Joe Burrow specifically (the reported case): tooltip now starts well on-screen instead of
+  running negative, confirmed via both computed position and a screenshot.
+- 2026-07-30 — Phase 6 (deploy) done, all of 6.1-6.6. GitHub: created github.com/kgm27/startline (public), pushed
+  via a new SSH key (owner added the public key to their GitHub account, no password handled by Claude). Render:
+  owner created the account and Starter web service (~$7/mo) themselves (payment details are owner-only), Claude
+  provided the env var values to copy from `.env` and the exact Start Command (Render doesn't read the repo's
+  `Procfile` automatically, it wants the command pasted into its own field). Hit one real, non-obvious bug: the
+  first persistent disk was created with a trailing space in its mount path
+  (`/opt/render/project/src/data ` vs. the app's `.../data`), so every redeploy silently reset the database to
+  empty, since the app was actually writing to the container's throwaway filesystem, not the disk. Found this via
+  a temporary diagnostic endpoint (added, used, removed) rather than guessing; Render doesn't allow editing a
+  disk's mount path after creation, so the fix was delete-and-recreate the disk with the exact path, verified via
+  the same diagnostic before trusting it. Seeded the real `advisor.db` (374 players, the Week 15 2025 backtest)
+  onto the corrected disk via a temporary, secret-token-gated upload endpoint (same auth pattern as `/refresh`),
+  used twice, removed both times — this avoided both a wasteful production re-pull of the Odds API and setting up
+  SSH/CLI access just for a one-time file transfer. Confirmed the fix actually worked by pushing the
+  endpoint-removal commit itself as the real persistence test: the 374-player dataset survived that redeploy.
+  Final state verified live: all four pages (Landing/Dashboard/Compare/About) return 200 at startline.onrender.com,
+  Dashboard shows real data with the boom-badge legend, and both temporary admin endpoints are confirmed gone
+  (404) from production.
 - 2026-07-30 — 5.5 built and confirmed: added `error.html` (shared branded template for both 404 and 500) and two
   exception handlers in `main.py`. 404s now show the branded page; 400/401 keep their existing plain JSON (already
   safe/meaningful, not a leak). Unhandled crashes are logged server-side with the full traceback and show

@@ -100,7 +100,7 @@
                                 <span class="player-name" x-text="row.name"></span>
                                 <template x-if="row.boom_flag">
                                     <span class="boom-badge hover-tag"
-                                          @mouseenter="showTooltip($event, row.boom_tooltip)"
+                                          @mouseenter="showTooltipRight($event, row.boom_tooltip)"
                                           @mouseleave="hideTooltip()">🚀</span>
                                 </template>
                             </td>
@@ -147,7 +147,7 @@
         </p>
     </div>
 
-    <div class="global-tooltip" :class="{ 'tooltip-visible': tooltipVisible, 'tooltip-above': tooltipAbove }"
+    <div class="global-tooltip" :class="{ 'tooltip-visible': tooltipVisible, 'tooltip-above': tooltipAbove, 'tooltip-side': tooltipSide }"
          x-ref="tooltip"
          :style="`left:${tooltipX}px; top:${tooltipY}px;`"
          x-html="tooltipText"></div>
@@ -170,12 +170,14 @@
             tooltipX: 0,
             tooltipY: 0,
             tooltipAbove: false,
+            tooltipSide: false,
             showTooltip(event, text) {
                 const rect = event.target.getBoundingClientRect();
                 this.tooltipText = text;
                 this.tooltipX = rect.left + rect.width / 2;
                 this.tooltipY = rect.bottom + 8;
                 this.tooltipAbove = false;
+                this.tooltipSide = false;
                 this.tooltipVisible = true;
                 // the tooltip is always rendered (opacity-only visibility, see
                 // .global-tooltip CSS), so its real height is measurable as
@@ -188,6 +190,30 @@
                     if (rect.bottom + 8 + h > window.innerHeight) {
                         this.tooltipY = rect.top - h - 8;
                         this.tooltipAbove = true;
+                    }
+                });
+            },
+            // The boom badge sits right next to the player's name in the
+            // table's leftmost column, so the default centered-below layout
+            // gets clipped by the viewport/table edge for short names (e.g.
+            // "Joe Burrow") — this variant anchors to the badge's right side
+            // instead, only falling back to the left if there's truly no
+            // room (e.g. a very narrow window).
+            showTooltipRight(event, text) {
+                const rect = event.target.getBoundingClientRect();
+                this.tooltipText = text;
+                this.tooltipX = rect.right + 8;
+                this.tooltipY = rect.top;
+                this.tooltipAbove = false;
+                this.tooltipSide = true;
+                this.tooltipVisible = true;
+                this.$nextTick(() => {
+                    const el = this.$refs.tooltip;
+                    if (!el) return;
+                    const r = el.getBoundingClientRect();
+                    this.tooltipY = rect.top + rect.height / 2 - r.height / 2;
+                    if (rect.right + 8 + r.width > window.innerWidth) {
+                        this.tooltipX = rect.left - r.width - 8;
                     }
                 });
             },
