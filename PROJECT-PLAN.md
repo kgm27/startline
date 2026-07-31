@@ -814,3 +814,23 @@ a cheap **daily** headline pull (feeds the Phase 3B trend chart) and the fuller 
   UI convention, not prose, a deliberate judgment call flagged to the owner rather than silently decided).
   `PROJECT-PLAN.md`'s own historical log entries (~130 instances across many past sessions) were left alone,
   out of scope for this pass since it's an internal doc, not something site visitors see.
+- 2026-07-31 — Owner asked to make all league formats work, not just Half PPR. Turned out Standard and Full PPR
+  already had correct scoring math in `app/scoring/config.py` (built earlier, never wired up); they were just
+  hidden behind a "coming soon" wall that only ever checked for `half_ppr` specifically. Superflex/Dynasty/Best
+  Ball were removed from the dropdown entirely (owner's call): those are roster/league-structure concepts, not
+  actual point-scoring formulas, so they never had real math to enable in the first place.
+  The League Format dropdown now drives a real navigation (`?format=standard` etc., same pattern as `?week=`)
+  instead of just toggling local UI state, so Dashboard/Compare/About/Player detail all resolve and honor an
+  explicit format server-side (validated against the 3 real formats, falling back safely to Half PPR for
+  anything else, including old bookmarked links to the removed options). Found and fixed a real gap while
+  building this: DFS Projection numbers are pre-scored by Underdog/PrizePicks in their own fixed format, so
+  they can't be rescored for Standard/Full PPR the way the sportsbook-derived side can. Owner's call: rather
+  than show a stale/misleading number, DFS Projection is excluded from the blend entirely outside Half PPR
+  (Blended becomes the Sportsbook-derived number alone), and the DFS Proj. column/row/tile is hidden on all
+  four pages for non-Half-PPR formats, with a plain-language note on Player detail explaining why. Verified
+  live end-to-end: switching formats on the Dashboard actually renders different Blended scores (confirmed
+  McCaffrey moves from 20.81 Standard to 22.21 Half PPR to 23.61 Full PPR, the correct direction for a
+  pass-catching RB), the DFS column disappears outside Half PPR on Dashboard/Compare/About/Player detail, an
+  invalid `?format=` value falls back to Half PPR without crashing, and the selected format persists correctly
+  across every internal link (Dashboard row → Player detail, Compare's player links, About's worked example,
+  the "back to dashboard" link).

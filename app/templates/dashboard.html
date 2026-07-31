@@ -5,18 +5,15 @@
     <header class="topbar">
         <div class="topbar-titles">
             <h1>StartLine</h1>
-            <p class="subtitle">Week {{ week }}</p>
+            <p class="subtitle">Week {{ week }} &middot; {{ scoring_format_label }}</p>
         </div>
         <div class="topbar-actions">
             <div class="league-format-picker">
                 <label for="league-format" class="league-format-label">League Format</label>
-                <select id="league-format" x-model="leagueFormat">
+                <select id="league-format" :value="leagueFormat" @change="changeFormat($event.target.value)">
                     <option value="half_ppr">Half PPR</option>
                     <option value="standard">Standard</option>
                     <option value="full_ppr">Full PPR</option>
-                    <option value="superflex">Superflex</option>
-                    <option value="dynasty">Dynasty</option>
-                    <option value="best_ball">Best Ball</option>
                 </select>
             </div>
         </div>
@@ -29,7 +26,7 @@
     </div>
     {% endif %}
 
-    <div x-show="leagueFormat === 'half_ppr'" x-cloak>
+    <div>
         {% if not odds_configured or not fantasypros_configured %}
         <div class="notice">
             {% if not odds_configured %}<p>Odds API key not set: sportsbook-projection points and DFS (Underdog/PrizePicks) projections are unavailable until you add ODDS_API_KEY to .env.</p>{% endif %}
@@ -87,7 +84,9 @@
                         <th>Pos</th>
                         <th>Team</th>
                         <th>Injury</th>
+                        {% if scoring_format == 'half_ppr' %}
                         <th class="sortable" :class="{sorted: sortKey === 'dfs_pts'}" @click="sortBy('dfs_pts')">DFS Proj. <span class="sort-arrow" x-text="arrow('dfs_pts')"></span></th>
+                        {% endif %}
                         <th class="sortable" :class="{sorted: sortKey === 'betting_pts'}" @click="sortBy('betting_pts')">Sportsbook Proj. <span class="sort-arrow" x-text="arrow('betting_pts')"></span></th>
                         <th class="sortable" :class="{sorted: sortKey === 'blended'}" @click="sortBy('blended')">Blended <span class="sort-arrow" x-text="arrow('blended')"></span></th>
                         <th>Expert</th>
@@ -117,10 +116,12 @@
                                     <span>—</span>
                                 </template>
                             </td>
+                            {% if scoring_format == 'half_ppr' %}
                             <td x-text="fmt1(row.dfs_pts)"></td>
+                            {% endif %}
                             <td x-text="fmt1(row.betting_pts)"></td>
                             <td>
-                                <a class="blended-link" :href="'/player/' + row.id + '?week={{ week }}'" x-text="fmt1(row.blended)"></a>
+                                <a class="blended-link" :href="'/player/' + row.id + '?week={{ week }}&format={{ scoring_format }}'" x-text="fmt1(row.blended)"></a>
                                 <span class="row-trend" x-show="row.trend_svg" x-html="row.trend_svg"></span>
                                 <span class="row-trend-empty" x-show="!row.trend_svg">—</span>
                             </td>
@@ -128,7 +129,7 @@
                         </tr>
                     </template>
                     <tr x-show="filteredRows.length === 0">
-                        <td colspan="8" class="empty-state">
+                        <td colspan="{{ 8 if scoring_format == 'half_ppr' else 7 }}" class="empty-state">
                             No players match your filters.
                         </td>
                     </tr>
@@ -140,13 +141,6 @@
         </div>
     </div>
 
-    <div class="table-card" x-show="leagueFormat !== 'half_ppr'" x-cloak>
-        <p class="empty-state">
-            Only Half PPR is wired up right now. Standard, Full PPR, Superflex, Dynasty, and Best Ball support
-            is coming soon. Switch back to Half PPR above to see this week's numbers.
-        </p>
-    </div>
-
     <div class="global-tooltip" :class="{ 'tooltip-visible': tooltipVisible, 'tooltip-above': tooltipAbove, 'tooltip-side': tooltipSide }"
          x-ref="tooltip"
          :style="`left:${tooltipX}px; top:${tooltipY}px;`"
@@ -156,12 +150,13 @@
 <script>
     const ALL_ROWS = {{ rows_json | safe }};
     const INITIAL_POSITION = {{ initial_position_json | safe }};
+    const WEEK = {{ week }};
 
     function dashboard() {
         return {
             allRows: ALL_ROWS,
             positionFilter: INITIAL_POSITION,
-            leagueFormat: 'half_ppr',
+            leagueFormat: '{{ scoring_format }}',
             search: '',
             sortKey: 'blended',
             sortDir: 'desc',
@@ -171,6 +166,13 @@
             tooltipY: 0,
             tooltipAbove: false,
             tooltipSide: false,
+            // Scoring format actually changes the blended-score math
+            // server-side, so switching it is a real navigation (new page
+            // load with ?format=), not just local UI state, unlike the
+            // position filter/search/sort which stay client-side only.
+            changeFormat(value) {
+                window.location.href = `/dashboard?week=${WEEK}&format=${value}`;
+            },
             showTooltip(event, text) {
                 const rect = event.target.getBoundingClientRect();
                 this.tooltipText = text;

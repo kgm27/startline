@@ -288,6 +288,25 @@ def _boom_probability(curve, expected):
     return _interpolate_survival(curve, expected * (1 + BOOM_MARGIN))
 
 
+SCORING_FORMAT_LABELS = {
+    "half_ppr": "Half PPR",
+    "standard": "Standard",
+    "full_ppr": "Full PPR",
+}
+
+
+def _resolve_scoring_format(requested_format):
+    """An explicit ?format= is honored as long as it's one of the three
+    real scoring formats (their point values live in SCORING_RULES).
+    Anything else (missing, unrecognized, or one of the removed
+    roster/league-structure options like Superflex that was never a real
+    scoring formula) falls back to the site's configured default."""
+    if requested_format in SCORING_RULES:
+        return requested_format
+    settings = get_settings()
+    return settings.scoring_format if settings.scoring_format in SCORING_RULES else "half_ppr"
+
+
 def _resolve_week(db, requested_week):
     """Picks which week to show. An explicit ?week= is always honored as-is.
     Otherwise: try the real current NFL week; if that week has no data yet
@@ -548,7 +567,7 @@ _PLAYER_ROWS_CACHE = {}
 _PLAYER_ROWS_CACHE_TTL_SECONDS = 30
 
 
-def _player_rows(db, week, scoring):
+def _player_rows(db, week, scoring, scoring_format):
     """Every player's headline numbers for a given week: the shared dataset
     behind both the Dashboard table and the Comparison picker, so the two
     pages can never show different numbers for the same player/week.
@@ -560,8 +579,18 @@ def _player_rows(db, week, scoring):
     also caches the built rows briefly (_PLAYER_ROWS_CACHE_TTL_SECONDS):
     the underlying data only changes when /refresh runs, which is gated
     behind a secret token and happens at most a few times a day, not on
-    every page view."""
-    cache_key = (week, scoring)
+    every page view.
+
+    `scoring_format` gates whether DFS Projection is included at all:
+    those numbers come pre-scored from Underdog/PrizePicks in whatever
+    format that DFS site uses (effectively Half PPR), and there's no raw
+    stat line behind them to re-score for Standard/Full PPR, unlike the
+    Sportsbook-derived side which is built from real market probabilities
+    per stat and can honor any scoring rule. Rather than show a
+    misleading number, DFS Projection (and the Blended average's DFS
+    half) is simply left out outside Half PPR, so Blended becomes the
+    Sportsbook-derived number alone in that case."""
+    cache_key = (week, scoring_format)
     cached = _PLAYER_ROWS_CACHE.get(cache_key)
     if cached and time.time() - cached[0] < _PLAYER_ROWS_CACHE_TTL_SECONDS:
         return cached[1]
@@ -588,7 +617,7 @@ def _player_rows(db, week, scoring):
         props = props_by_player.get(player.id, [])
         expert = expert_by_player.get(player.id)
 
-        dfs_pts = dfs_projection_points(projections)
+        dfs_pts = dfs_projection_points(projections) if scoring_format == "half_ppr" else None
         betting_pts = betting_derived_points(props, scoring)
         blended = blend_expected_points(dfs_pts, betting_pts)
 
@@ -679,16 +708,16 @@ def _player_rows(db, week, scoring):
 
 
 @app.get("/dashboard")
-def dashboard(request: Request, week: int = None, position: str = None, note: str = None, db: Session = Depends(get_db)):
+def dashboard(request: Request, week: int = None, position: str = None, note: str = None, format: str = None, db: Session = Depends(get_db)):
     settings = get_settings()
     week, is_demo_week = _resolve_week(db, week)
-
-    scoring = SCORING_RULES.get(settings.scoring_format, SCORING_RULES["half_ppr"])
+    scoring_format = _resolve_scoring_format(format)
+    scoring = SCORING_RULES[scoring_format]
 
     # Position filtering/search/sort all happen client-side (see dashboard.html)
     # for a snappy no-reload experience, so this always loads every position:
     # `position` is only used to seed which pill starts active.
-    rows = _player_rows(db, week, scoring)
+    rows = _player_rows(db, week, scoring, scoring_format)
 
     # Tiny inline Blended-score trend sparkline per row (Phase 3B.4). One
     # bulk query for the whole week rather than one per player/row.
@@ -720,7 +749,8 @@ def dashboard(request: Request, week: int = None, position: str = None, note: st
         "summary": summary,
         "week": week,
         "position": position,
-        "scoring_format": settings.scoring_format,
+        "scoring_format": scoring_format,
+        "scoring_format_label": SCORING_FORMAT_LABELS[scoring_format],
         "odds_configured": bool(settings.odds_api_key),
         "fantasypros_configured": bool(settings.fantasypros_api_key),
         "note": note,
@@ -730,11 +760,11 @@ def dashboard(request: Request, week: int = None, position: str = None, note: st
 
 
 @app.get("/compare")
-def compare(request: Request, week: int = None, a: str = None, b: str = None, db: Session = Depends(get_db)):
-    settings = get_settings()
+def compare(request: Request, week: int = None, a: str = None, b: str = None, format: str = None, db: Session = Depends(get_db)):
     week, is_demo_week = _resolve_week(db, week)
-    scoring = SCORING_RULES.get(settings.scoring_format, SCORING_RULES["half_ppr"])
-    rows = _player_rows(db, week, scoring)
+    scoring_format = _resolve_scoring_format(format)
+    scoring = SCORING_RULES[scoring_format]
+    rows = _player_rows(db, week, scoring, scoring_format)
 
     # ?a=&b= (player IDs) preselect the two pickers so a comparison can be
     # bookmarked/shared, same convention as the Dashboard/Player pages' ?week=.
@@ -750,21 +780,23 @@ def compare(request: Request, week: int = None, a: str = None, b: str = None, db
         "initial_b_json": _script_safe_json(initial_b),
         "week": week,
         "is_demo_week": is_demo_week,
+        "scoring_format": scoring_format,
+        "scoring_format_label": SCORING_FORMAT_LABELS[scoring_format],
         "active_page": "compare",
     })
 
 
 @app.get("/about")
-def about(request: Request, db: Session = Depends(get_db)):
-    settings = get_settings()
+def about(request: Request, format: str = None, db: Session = Depends(get_db)):
     week, is_demo_week = _resolve_week(db, None)
-    scoring = SCORING_RULES.get(settings.scoring_format, SCORING_RULES["half_ppr"])
+    scoring_format = _resolve_scoring_format(format)
+    scoring = SCORING_RULES[scoring_format]
 
     # A real, live worked example beats a made-up one: this week's #1
     # blended score, whoever that happens to be, so the walkthrough below
     # always points at genuine (not fabricated) numbers a reader can click
     # into and verify on that player's own page.
-    rows = _player_rows(db, week, scoring)
+    rows = _player_rows(db, week, scoring, scoring_format)
     example = rows[0] if rows else None
 
     return templates.TemplateResponse("about.html", {
@@ -773,23 +805,25 @@ def about(request: Request, db: Session = Depends(get_db)):
         "is_demo_week": is_demo_week,
         "example": example,
         "scoring": scoring,
+        "scoring_format": scoring_format,
+        "scoring_format_label": SCORING_FORMAT_LABELS[scoring_format],
         "active_page": "about",
     })
 
 
 @app.get("/player/{player_id}")
-def player_detail(request: Request, player_id: str, week: int = None, db: Session = Depends(get_db)):
+def player_detail(request: Request, player_id: str, week: int = None, format: str = None, db: Session = Depends(get_db)):
     """Shows exactly what fed into a player's blended score: each DFS site's
     number separately, and every sportsbook's line for every market,
     not just the single averaged numbers shown on the dashboard."""
-    settings = get_settings()
     week, is_demo_week = _resolve_week(db, week)
 
     player = db.query(Player).get(player_id)
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
 
-    scoring = SCORING_RULES.get(settings.scoring_format, SCORING_RULES["half_ppr"])
+    scoring_format = _resolve_scoring_format(format)
+    scoring = SCORING_RULES[scoring_format]
 
     dfs_rows = db.query(DfsProjection).filter_by(player_id=player.id, week=week).all()
     props = (
@@ -953,7 +987,7 @@ def player_detail(request: Request, player_id: str, week: int = None, db: Sessio
     stats.sort(key=lambda m: MARKET_ORDER.index(m["key"]) if m["key"] in MARKET_ORDER else len(MARKET_ORDER))
     markets = stats
 
-    dfs_pts = dfs_projection_points(dfs_rows)
+    dfs_pts = dfs_projection_points(dfs_rows) if scoring_format == "half_ppr" else None
     betting_pts = betting_derived_points(props, scoring)
     blended = blend_expected_points(dfs_pts, betting_pts)
     expert_persp = expert_perspective(player.position, expert.position_rank if expert else None)
@@ -1025,6 +1059,8 @@ def player_detail(request: Request, player_id: str, week: int = None, db: Sessio
         "headline_trend_json": _script_safe_json(headline_trend),
         "boom": boom,
         "is_demo_week": is_demo_week,
+        "scoring_format": scoring_format,
+        "scoring_format_label": SCORING_FORMAT_LABELS[scoring_format],
     })
 
 

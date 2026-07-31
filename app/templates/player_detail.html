@@ -4,12 +4,13 @@
 <div class="page" x-data="playerDetail()">
     <header class="topbar">
         <div class="topbar-titles">
-            <a class="back-link" href="/dashboard?week={{ week }}">&larr; Back to dashboard</a>
+            <a class="back-link" href="/dashboard?week={{ week }}&format={{ scoring_format }}">&larr; Back to dashboard</a>
             <h1 style="margin-top: 0.4rem;">{{ player.name }}</h1>
             <p class="subtitle">
                 {{ player.position }} &middot;
                 <span class="team-badge" :style="teamStyle({{ player.team | tojson }})">{{ player.team }}</span>
                 &middot; Week {{ week }}
+                &middot; {{ scoring_format_label }}
                 {% if player.injury_status %}
                 &middot;
                 <span class="hover-tag"
@@ -101,7 +102,11 @@
     {% endif %}
 
     <h2 id="dfs-projections">DFS Projections</h2>
-    {% if dfs_rows %}
+    {% if scoring_format != 'half_ppr' %}
+    <p class="note">DFS Projection isn't shown in {{ scoring_format_label }}: these numbers come pre-scored from
+        Underdog/PrizePicks in their own format, and there's no raw stat line behind them to re-score for a
+        different one. Switch to Half PPR to see it.</p>
+    {% elif dfs_rows %}
     <div class="table-card">
         <table class="dfs-table">
             <thead><tr><th>Source</th><th>Projected Points</th></tr></thead>

@@ -5,7 +5,7 @@
     <header class="topbar">
         <div class="topbar-titles">
             <h1>Compare Players</h1>
-            <p class="subtitle">Week {{ week }} &middot; head-to-head DFS / betting / blended numbers</p>
+            <p class="subtitle">Week {{ week }} &middot; {{ scoring_format_label }} &middot; head-to-head DFS / betting / blended numbers</p>
         </div>
     </header>
 
@@ -81,7 +81,7 @@
                     <tr>
                         <th></th>
                         <th class="compare-player-head" :class="colClass('A')">
-                            <a :href="'/player/' + playerA.id + '?week={{ week }}'" x-text="playerA.name"></a>
+                            <a :href="'/player/' + playerA.id + '?week={{ week }}&format={{ scoring_format }}'" x-text="playerA.name"></a>
                             <div class="compare-player-meta">
                                 <span class="team-badge" :style="teamStyle(playerA.team)" x-text="playerA.team"></span>
                                 <span x-text="playerA.position"></span>
@@ -95,7 +95,7 @@
                             </template>
                         </th>
                         <th class="compare-player-head" :class="colClass('B')">
-                            <a :href="'/player/' + playerB.id + '?week={{ week }}'" x-text="playerB.name"></a>
+                            <a :href="'/player/' + playerB.id + '?week={{ week }}&format={{ scoring_format }}'" x-text="playerB.name"></a>
                             <div class="compare-player-meta">
                                 <span class="team-badge" :style="teamStyle(playerB.team)" x-text="playerB.team"></span>
                                 <span x-text="playerB.position"></span>
@@ -156,7 +156,9 @@
             allRows: ALL_ROWS,
             metrics: [
                 { key: 'blended', label: 'Blended' },
+                {% if scoring_format == 'half_ppr' %}
                 { key: 'dfs_pts', label: 'DFS Projection' },
+                {% endif %}
                 { key: 'betting_pts', label: 'Sportsbook Projection' },
             ],
             queryA: '',

@@ -92,16 +92,18 @@
         {% if example %}
         <h2>A real example</h2>
         <p>
-            This week's highest blended score belongs to
-            <a href="/player/{{ example.id }}?week={{ week }}">{{ example.name }}</a> ({{ example.position }} &middot;
+This week's highest {{ scoring_format_label }} blended score belongs to
+            <a href="/player/{{ example.id }}?week={{ week }}&format={{ scoring_format }}">{{ example.name }}</a> ({{ example.position }} &middot;
             {{ example.team }}). Here's how that number was built:
         </p>
         <div class="example-callout">
             <section class="summary-box">
+                {% if scoring_format == 'half_ppr' %}
                 <div>
                     <span class="summary-label">DFS Projection</span>
                     <span class="summary-value">{{ "%.2f"|format(example.dfs_pts) if example.dfs_pts is not none else "—" }}</span>
                 </div>
+                {% endif %}
                 <div>
                     <span class="summary-label">Sportsbook Projection</span>
                     <span class="summary-value">{{ "%.2f"|format(example.betting_pts) if example.betting_pts is not none else "—" }}</span>
@@ -114,7 +116,7 @@
             <p class="note">
                 {% if is_demo_week %}From the Week {{ week }}, 2025 demo dataset: a real backtest, not a
                 fabricated example.{% endif %}
-                <a href="/player/{{ example.id }}?week={{ week }}">See the full per-market breakdown &rarr;</a>
+                <a href="/player/{{ example.id }}?week={{ week }}&format={{ scoring_format }}">See the full per-market breakdown &rarr;</a>
             </p>
         </div>
         {% endif %}
