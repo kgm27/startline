@@ -459,11 +459,27 @@ a cheap **daily** headline pull (feeds the Phase 3B trend chart) and the fuller 
 
 ## Phase 8 — Final polish
 
-- [ ] **8.1** Write a proper `README.md` (what it is, the stack, a screenshot, a link to the live site) — this is
-      what people see on GitHub.
-- [ ] **8.2** Set up the custom domain if chosen (**D2**).
-- [ ] **8.3** Polish pass: social-share preview card, consistent titles/favicon. *(Desktop; mobile is Phase 10.)*
-- [ ] **8.4** (Optional) Lightweight privacy-friendly analytics so you can see visits.
+- [x] **8.1** Write a proper `README.md` (what it is, the stack, a screenshot, a link to the live site) — this is
+      what people see on GitHub. Done: covers what it is, the 4-step blend methodology, every page, the full
+      stack, data sources, and a local-dev quickstart. No embedded screenshot (owner chose to skip that part for
+      now, can add one later by dropping a PNG in and referencing it).
+- [x] **8.2** Set up the custom domain if chosen (**D2**). Done: registered `getstartline.com` (~$12/yr,
+      Namecheap, WhoisGuard privacy enabled). Confirmed available first via direct WHOIS/RDAP queries before
+      purchase across `.io`/`.com`/`.app`/`.dev` for the exact name (all taken) before landing on this one. Wired
+      into Render: an A record (`@` → `216.24.57.1`) for the apex domain and a CNAME (`www` → `startline.onrender.com`)
+      for the www subdomain, added at Namecheap after removing the default parking-page records that conflicted
+      with them. Both domains verified and got their SSL certificates issued by Render (a separate, slightly
+      slower step than DNS verification itself). `www.getstartline.com` correctly 301-redirects to the canonical
+      `getstartline.com`. Verified live: both `getstartline.com` and `www.getstartline.com` reachable over HTTPS,
+      every page (`/`, `/dashboard`, `/compare`, `/about`) returns 200 on the new domain.
+- [x] **8.3** Polish pass: social-share preview card, consistent titles/favicon. *(Desktop; mobile is Phase 10.)*
+      Done: added Open Graph + Twitter Card meta tags to `base.html` (site name, per-page title reused from the
+      existing `{% block title %}`, a description, and a canonical `og:url` built from `getstartline.com` regardless
+      of which host actually served the request). No preview image (owner chose to skip the image specifically,
+      title/description-only previews still work on every platform that supports OG tags). Titles/favicon were
+      already consistent from earlier phases. Verified live: correct per-page `og:title`/`og:url` on all four pages.
+- [ ] **8.4** (Optional) Lightweight privacy-friendly analytics so you can see visits. Owner decided 2026-07-31
+      to skip this for now, not required for launch. Left unchecked/open rather than marked done, can revisit later.
 
 ## Phase 9 — Launch
 
@@ -712,6 +728,18 @@ a cheap **daily** headline pull (feeds the Phase 3B trend chart) and the fuller 
   wouldn't know to check it. Added a small caption line above the Dashboard table: "🚀 High ceiling — hover the
   badge next to a player's name for the odds behind it." Player detail's boom callout wasn't touched since it's
   already an always-visible sentence, no legend needed there. Verified live via screenshot.
+- 2026-07-31 — Started Phase 8. Checked domain availability directly via WHOIS/RDAP (not guessing): `startline`
+  was taken across `.io` (since 2016), `.com` (since 1998), `.app` (since 2023), and `.dev` (since 2024).
+  `getstartline.com` confirmed genuinely available via the `.com` registry itself, registered at Namecheap
+  (~$12/yr, WhoisGuard privacy on, a free Namecheap protection). Connected it to Render: added an A record for
+  the apex domain and a CNAME for `www`, after removing Namecheap's default parking-page records that were
+  conflicting with them. Both domains verified and got SSL certificates (which lag DNS verification by several
+  minutes on Render, a real timing gotcha worth knowing about for next time). `www` now correctly redirects to
+  the canonical apex domain. 8.2 done. Also wrote `README.md` (8.1) and added Open Graph/Twitter Card meta tags
+  to `base.html` (8.3) with a canonical `og:url` hardcoded to `getstartline.com` so it's correct regardless of
+  which host (Render's or the custom domain) actually serves a given request. Owner chose to skip a real preview
+  image for now (tried a couple of approaches to generate one automatically, none worked out cleanly; title/
+  description-only social previews still work fine without it). 8.4 (optional analytics) still an open decision.
 - 2026-07-30 — Owner reported the boom-badge ("High Ceiling") hover tooltip was clipped off the left edge for
   short names like Joe Burrow — the default tooltip layout centers itself under the trigger element, and the
   badge sits near the table's left edge, so a 320px-wide tooltip centered there ran off-screen to the left. Added
