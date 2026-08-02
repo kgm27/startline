@@ -15,7 +15,8 @@
                 &middot;
                 <span class="hover-tag"
                       @mouseenter="showTooltip($event, INJURY_DEFINITIONS[{{ player.injury_status | tojson }}] || escapeHtml({{ player.injury_status | tojson }}))"
-                      @mouseleave="hideTooltip()">{{ player.injury_status }}</span>
+                      @mouseleave="hideTooltip()"
+                      @click.stop="showTooltip($event, INJURY_DEFINITIONS[{{ player.injury_status | tojson }}] || escapeHtml({{ player.injury_status | tojson }}))">{{ player.injury_status }}</span>
                 {% endif %}
             </p>
         </div>
@@ -34,7 +35,8 @@
             {% if dfs_pts is not none and dfs_breakdown %}
             <a href="#dfs-projections" class="summary-value"
                @mouseenter="showTooltip($event, breakdownTooltipHtml({{ dfs_breakdown | tojson }}, 'DFS Projection', {{ dfs_pts | tojson }}))"
-               @mouseleave="hideTooltip()">{{ "%.2f"|format(dfs_pts) }}</a>
+               @mouseleave="hideTooltip()"
+               @click.stop="showTooltip($event, breakdownTooltipHtml({{ dfs_breakdown | tojson }}, 'DFS Projection', {{ dfs_pts | tojson }}))">{{ "%.2f"|format(dfs_pts) }}</a>
             {% else %}
             <span class="summary-value">—</span>
             {% endif %}
@@ -44,7 +46,8 @@
             {% if betting_pts is not none and betting_breakdown %}
             <a href="#sportsbook-markets" class="summary-value"
                @mouseenter="showTooltip($event, breakdownTooltipHtml({{ betting_breakdown | tojson }}, 'Sportsbook Projection', {{ betting_pts | tojson }}))"
-               @mouseleave="hideTooltip()">{{ "%.2f"|format(betting_pts) }}</a>
+               @mouseleave="hideTooltip()"
+               @click.stop="showTooltip($event, breakdownTooltipHtml({{ betting_breakdown | tojson }}, 'Sportsbook Projection', {{ betting_pts | tojson }}))">{{ "%.2f"|format(betting_pts) }}</a>
             {% else %}
             <span class="summary-value">—</span>
             {% endif %}
@@ -54,7 +57,8 @@
             {% if blended is not none and blended_breakdown %}
             <span class="summary-value hover-tag"
                   @mouseenter="showTooltip($event, breakdownTooltipHtml({{ blended_breakdown | tojson }}, 'Blended (average)', {{ blended | tojson }}, 'Blended'))"
-                  @mouseleave="hideTooltip()">{{ "%.2f"|format(blended) }}</span>
+                  @mouseleave="hideTooltip()"
+                  @click.stop="showTooltip($event, breakdownTooltipHtml({{ blended_breakdown | tojson }}, 'Blended (average)', {{ blended | tojson }}, 'Blended'))">{{ "%.2f"|format(blended) }}</span>
             {% else %}
             <span class="summary-value">{{ "%.2f"|format(blended) if blended is not none else "—" }}</span>
             {% endif %}
@@ -132,7 +136,7 @@
         <div class="market-block" {% if m.thresholds and m.thresholds|length > 6 %}x-data="{ expanded: false }"{% endif %}>
             <h3>{{ m.label }}
                 <span class="market-summary">
-                    <span class="hover-tag" @mouseenter="showTooltip($event, {{ m.method_tooltip | tojson }})" @mouseleave="hideTooltip()">{{ m.method_label }}</span>
+                    <span class="hover-tag" @mouseenter="showTooltip($event, {{ m.method_tooltip | tojson }})" @mouseleave="hideTooltip()" @click.stop="showTooltip($event, {{ m.method_tooltip | tojson }})">{{ m.method_label }}</span>
                     &middot; {{ m.average }}{% if m.unit %} {{ m.unit }}{% endif %} &times; {{ m.rate }} pts{% if m.unit %}/{{ m.unit }}{% endif %} = <strong>{{ m.points }} pts</strong>
                 </span>
             </h3>
@@ -143,7 +147,7 @@
                     <tr>
                         <th>Threshold</th>
                         <th>Chance of Going Over
-                            <span class="info-icon" @mouseenter="showTooltip($event, 'Chance the actual result finishes above this threshold, based on real sportsbook odds.')" @mouseleave="hideTooltip()">ⓘ</span>
+                            <span class="info-icon" @mouseenter="showTooltip($event, 'Chance the actual result finishes above this threshold, based on real sportsbook odds.')" @mouseleave="hideTooltip()" @click.stop="showTooltip($event, 'Chance the actual result finishes above this threshold, based on real sportsbook odds.')">ⓘ</span>
                         </th>
                         <th>Books Quoting It</th>
                     </tr>
@@ -155,7 +159,8 @@
                         <td>
                             <span class="hover-tag"
                                   @mouseenter="showTooltip($event, {{ t.trend_tooltip | tojson }})"
-                                  @mouseleave="hideTooltip()">{{ (t.probability * 100)|round(1) }}%</span>
+                                  @mouseleave="hideTooltip()"
+                                  @click.stop="showTooltip($event, {{ t.trend_tooltip | tojson }})">{{ (t.probability * 100)|round(1) }}%</span>
                         </td>
                         <td>
                             {% if t.assumed %}
@@ -163,7 +168,8 @@
                             {% elif t.book_count > 0 %}
                             <span class="hover-tag"
                                   @mouseenter="showTooltip($event, booksTooltipHtml({{ t.books | tojson }}, 'Over {{ t.threshold }}{% if m.unit %} {{ m.unit }}{% endif %}'))"
-                                  @mouseleave="hideTooltip()">{{ t.book_count }}</span>
+                                  @mouseleave="hideTooltip()"
+                                  @click.stop="showTooltip($event, booksTooltipHtml({{ t.books | tojson }}, 'Over {{ t.threshold }}{% if m.unit %} {{ m.unit }}{% endif %}'))">{{ t.book_count }}</span>
                             {% else %}
                             {{ t.book_count }}
                             {% endif %}
@@ -226,6 +232,12 @@
             tooltipX: 0,
             tooltipY: 0,
             tooltipAbove: false,
+            // Tap-to-open tooltips (@click.stop on each trigger) need a way to
+            // close again on mobile, where there's no mouseleave. Any click
+            // that isn't a trigger (those stop propagation) reaches here.
+            init() {
+                document.addEventListener('click', () => this.hideTooltip());
+            },
             showTooltip(event, text) {
                 const rect = event.target.getBoundingClientRect();
                 this.tooltipText = text;
@@ -240,11 +252,17 @@
                 this.$nextTick(() => {
                     const el = this.$refs.tooltip;
                     if (!el) return;
-                    const h = el.getBoundingClientRect().height;
-                    if (rect.bottom + 8 + h > window.innerHeight) {
-                        this.tooltipY = rect.top - h - 8;
+                    const r = el.getBoundingClientRect();
+                    if (rect.bottom + 8 + r.height > window.innerHeight) {
+                        this.tooltipY = rect.top - r.height - 8;
                         this.tooltipAbove = true;
                     }
+                    // Keep the centered bubble on-screen on narrow (mobile)
+                    // viewports instead of letting it clip past either edge.
+                    this.tooltipX = Math.min(
+                        Math.max(this.tooltipX, 8 + r.width / 2),
+                        window.innerWidth - 8 - r.width / 2
+                    );
                 });
             },
             hideTooltip() {

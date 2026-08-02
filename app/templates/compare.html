@@ -89,7 +89,8 @@
                             <template x-if="playerA.injury">
                                 <div class="compare-injury-flag"
                                      @mouseenter="showTooltip($event, INJURY_DEFINITIONS[playerA.injury] || escapeHtml(playerA.injury))"
-                                     @mouseleave="hideTooltip()">
+                                     @mouseleave="hideTooltip()"
+                                     @click.stop="showTooltip($event, INJURY_DEFINITIONS[playerA.injury] || escapeHtml(playerA.injury))">
                                     <span x-text="playerA.injury"></span>
                                 </div>
                             </template>
@@ -103,7 +104,8 @@
                             <template x-if="playerB.injury">
                                 <div class="compare-injury-flag"
                                      @mouseenter="showTooltip($event, INJURY_DEFINITIONS[playerB.injury] || escapeHtml(playerB.injury))"
-                                     @mouseleave="hideTooltip()">
+                                     @mouseleave="hideTooltip()"
+                                     @click.stop="showTooltip($event, INJURY_DEFINITIONS[playerB.injury] || escapeHtml(playerB.injury))">
                                     <span x-text="playerB.injury"></span>
                                 </div>
                             </template>
@@ -175,6 +177,10 @@
             init() {
                 if (INITIAL_A) this.playerA = this.allRows.find(r => String(r.id) === String(INITIAL_A)) || null;
                 if (INITIAL_B) this.playerB = this.allRows.find(r => String(r.id) === String(INITIAL_B)) || null;
+                // Tap-to-open tooltips (@click.stop on each trigger) need a way
+                // to close again on mobile, where there's no mouseleave. Any
+                // click that isn't a trigger (those stop propagation) reaches here.
+                document.addEventListener('click', () => this.hideTooltip());
             },
             matches(query, exclude) {
                 const q = query.trim().toLowerCase();
@@ -233,11 +239,17 @@
                 this.$nextTick(() => {
                     const el = this.$refs.tooltip;
                     if (!el) return;
-                    const h = el.getBoundingClientRect().height;
-                    if (rect.bottom + 8 + h > window.innerHeight) {
-                        this.tooltipY = rect.top - h - 8;
+                    const r = el.getBoundingClientRect();
+                    if (rect.bottom + 8 + r.height > window.innerHeight) {
+                        this.tooltipY = rect.top - r.height - 8;
                         this.tooltipAbove = true;
                     }
+                    // Keep the centered bubble on-screen on narrow (mobile)
+                    // viewports instead of letting it clip past either edge.
+                    this.tooltipX = Math.min(
+                        Math.max(this.tooltipX, 8 + r.width / 2),
+                        window.innerWidth - 8 - r.width / 2
+                    );
                 });
             },
             hideTooltip() {

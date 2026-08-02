@@ -100,7 +100,8 @@
                                 <template x-if="row.boom_flag">
                                     <span class="boom-badge hover-tag"
                                           @mouseenter="showTooltipRight($event, row.boom_tooltip)"
-                                          @mouseleave="hideTooltip()">🚀</span>
+                                          @mouseleave="hideTooltip()"
+                                          @click.stop="showTooltipRight($event, row.boom_tooltip)">🚀</span>
                                 </template>
                             </td>
                             <td x-text="row.position"></td>
@@ -110,6 +111,7 @@
                                     <span class="hover-tag"
                                           @mouseenter="showTooltip($event, INJURY_DEFINITIONS[row.injury] || escapeHtml(row.injury))"
                                           @mouseleave="hideTooltip()"
+                                          @click.stop="showTooltip($event, INJURY_DEFINITIONS[row.injury] || escapeHtml(row.injury))"
                                           x-text="row.injury"></span>
                                 </template>
                                 <template x-if="!row.injury">
@@ -166,6 +168,12 @@
             tooltipY: 0,
             tooltipAbove: false,
             tooltipSide: false,
+            // Tap-to-open tooltips (@click.stop on each trigger) need a way to
+            // close again on mobile, where there's no mouseleave. Any click
+            // that isn't a trigger (those stop propagation) reaches here.
+            init() {
+                document.addEventListener('click', () => this.hideTooltip());
+            },
             // Scoring format actually changes the blended-score math
             // server-side, so switching it is a real navigation (new page
             // load with ?format=), not just local UI state, unlike the
@@ -188,11 +196,17 @@
                 this.$nextTick(() => {
                     const el = this.$refs.tooltip;
                     if (!el) return;
-                    const h = el.getBoundingClientRect().height;
-                    if (rect.bottom + 8 + h > window.innerHeight) {
-                        this.tooltipY = rect.top - h - 8;
+                    const r = el.getBoundingClientRect();
+                    if (rect.bottom + 8 + r.height > window.innerHeight) {
+                        this.tooltipY = rect.top - r.height - 8;
                         this.tooltipAbove = true;
                     }
+                    // Keep the centered bubble on-screen on narrow (mobile)
+                    // viewports instead of letting it clip past either edge.
+                    this.tooltipX = Math.min(
+                        Math.max(this.tooltipX, 8 + r.width / 2),
+                        window.innerWidth - 8 - r.width / 2
+                    );
                 });
             },
             // The boom badge sits right next to the player's name in the
@@ -217,6 +231,9 @@
                     if (rect.right + 8 + r.width > window.innerWidth) {
                         this.tooltipX = rect.left - r.width - 8;
                     }
+                    // On a narrow (mobile) viewport, even the left fallback can
+                    // run off-screen, so clamp the final position either way.
+                    this.tooltipX = Math.max(8, Math.min(this.tooltipX, window.innerWidth - r.width - 8));
                 });
             },
             hideTooltip() {

@@ -834,3 +834,26 @@ a cheap **daily** headline pull (feeds the Phase 3B trend chart) and the fuller 
   invalid `?format=` value falls back to Half PPR without crashing, and the selected format persists correctly
   across every internal link (Dashboard row → Player detail, Compare's player links, About's worked example,
   the "back to dashboard" link).
+- 2026-08-02 — Owner upgraded to FantasyPros' paid MVP/HOF membership and got a new API key; swapped it into
+  `.env`. Confirmed live: the new key genuinely works (old key now returns `403 Forbidden`, fully revoked; new
+  key returns `"tier": "premium"`, up from `"free"`, with a bigger expert panel). But the specific thing we
+  needed, historical Week 15 2025 rankings, is still not available: every request, regardless of the week/year
+  asked for, returns identical Week 1 2025 data (`"week": "1"`, `"public_api_limited": true` on both the old and
+  new key). Confirmed via FantasyPros' own docs page that "historical data & bulk access" is a separate
+  Commercial plan feature, not something the MVP/HOF tier includes, so this isn't a misconfiguration, it's a
+  different product tier entirely (enterprise/sales-negotiated, not self-serve). Verified the Week 1 data itself
+  is real (not placeholder): matches the actual 2025 Week 1 games (Ravens @ Bills, Cowboys @ Eagles), timestamped
+  9/07/2025. Owner decided: leave the expert column hidden/degraded for the Week 15 2025 demo as-is (matches
+  current behavior), revisit once the real 2026 season starts in September, when "current week" should track
+  live data. 3.3-3.5 remain open/paused, not done.
+- 2026-08-02 — Made every hover call-out (injury tags, the boom badge, DFS/Sportsbook/Blended breakdowns, method
+  labels, threshold percentages, books-quoting-it counts) also work on tap for mobile, across Dashboard, Compare,
+  and Player detail. Added a matching `@click.stop` next to each existing `@mouseenter` (same trigger text, so tap
+  opens the identical tooltip hover already shows), plus one `document`-level click listener per page that closes
+  the tooltip on any tap elsewhere. Desktop hover is untouched, verified directly at the DOM/event level (dispatched
+  real `mouseenter`/`mouseleave` events, confirmed identical open/close behavior to before). While testing on a
+  375px mobile viewport, found and fixed a real, previously-invisible bug: the boom badge's tooltip (`showTooltipRight`)
+  could render off-screen to the left on a narrow viewport, since its existing left-side fallback (for when there's
+  no room on the right) had no floor, and nobody could ever trigger this tooltip on mobile before today to notice.
+  Added a viewport clamp to `showTooltipRight` and to the plain centered `showTooltip` in all three templates.
+  Verified on a 375px viewport: tap opens the tooltip fully on-screen, tap elsewhere closes it.
