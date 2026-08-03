@@ -42,6 +42,18 @@ body {
 
 a { color: var(--accent); }
 
+/* Keyboard focus has to stay visible everywhere: this design leans on thin
+   borders and colour rather than obvious control chrome, so without an
+   explicit ring a keyboard user loses their place entirely. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
 /* ---------- shell ---------- */
 
 .page {
