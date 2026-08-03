@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Ask - StartLine{% endblock %}
+{% block content %}
+<div class="page page-narrow" x-data="ask()">
+    <h1 class="page-title">Ask</h1>
+    <p class="subtitle">Ask a start/sit question in plain English. Answers come from this week's
+        real data, not from memory. Week {{ week }} &middot; {{ scoring_format_label }}.</p>
+
+    {% if not chat_configured %}
+    <div class="notice">
+        <p>The assistant is not configured on this server. Set ANTHROPIC_API_KEY to enable it.</p>
+    </div>
+    {% endif %}
+
+    <form class="ask-form" @submit.prevent="send()">
+        <label class="league-format-label" for="q">Your question</label>
+        <textarea id="q" class="ask-input" rows="3" x-model="question"
+                  maxlength="500"
+                  placeholder="I have Dak, Joe Burrow, and Lamar. Who should I start?"
+                  @keydown.enter.meta="send()"
+                  {% if not chat_configured %}disabled{% endif %}></textarea>
+        <div class="ask-actions">
+            <button type="submit" class="btn btn-primary"
+                    :disabled="loading || !question.trim()"
+                    x-text="loading ? 'Thinking…' : 'Ask'"
+                    {% if not chat_configured %}disabled{% endif %}></button>
+            <span class="ask-count" x-text="`${question.length}/500`"></span>
+        </div>
+    </form>
+
+    <template x-if="!answer && !error && !loading">
+        <div class="ask-examples">
+            <p class="note">Try one of these:</p>
+            <template x-for="ex in examples" :key="ex">
+                <button type="button" class="btn ask-example" @click="question = ex; send()"
+                        x-text="ex" {% if not chat_configured %}disabled{% endif %}></button>
+            </template>
+        </div>
+    </template>
+
+    <template x-if="error">
+        <p class="notice" x-text="error"></p>
+    </template>
+
+    <template x-if="answer">
+        <div class="ask-answer">
+            <div class="ask-answer-label">Answer</div>
+            <p x-text="answer"></p>
+            <p class="ask-caveat">Based on Week {{ week }} data only. No live injury news or
+                late-breaking updates.</p>
+        </div>
+    </template>
+</div>
+
+<script>
+    function ask() {
+        return {
+            question: '',
+            answer: '',
+            error: '',
+            loading: false,
+            examples: [
+                'I have Dak, Joe Burrow, and Lamar. Who should I start?',
+                'Is George Kittle worth starting this week?',
+                'Who has the highest ceiling at running back?',
+            ],
+            async send() {
+                if (this.loading || !this.question.trim()) return;
+                this.loading = true;
+                this.answer = '';
+                this.error = '';
+                try {
+                    const res = await fetch('/api/ask?format={{ scoring_format }}', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ question: this.question }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) {
+                        this.error = data.detail || 'Something went wrong.';
+                    } else {
+                        this.answer = data.answer;
+                    }
+                } catch (e) {
+                    this.error = 'Could not reach the assistant. Check your connection.';
+                }
+                this.loading = false;
+            },
+        };
+    }
+</script>
+{% endblock %}

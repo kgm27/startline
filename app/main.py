@@ -39,6 +39,7 @@ from app.scoring.blend import (
     _effective_line,
 )
 from app.scoring.config import SCORING_RULES
+from app import chat
 
 Base.metadata.create_all(bind=engine)
 
@@ -261,6 +262,44 @@ INJURY_CODES = {
     "DNR": "DNR",
     "NA": "NA",
 }
+
+
+# The assistant endpoint spends real money per request, so the site-wide
+# limiter (100 req/60s, sized for static pages) is far too permissive for it:
+# at that rate a single visitor could run up a meaningful bill in a minute.
+# These are its own, much tighter limits.
+ASK_MAX_PER_HOUR = 5
+ASK_DAILY_TOKEN_BUDGET = 200_000  # a hard stop, not a target
+
+_ASK_HITS: dict[str, list[float]] = {}
+_ASK_SPEND: dict[str, int] = {}  # UTC date -> tokens used
+
+
+def _ask_rate_ok(ip: str) -> bool:
+    now = time.time()
+    hits = [t for t in _ASK_HITS.get(ip, []) if now - t < 3600]
+    if len(hits) >= ASK_MAX_PER_HOUR:
+        _ASK_HITS[ip] = hits
+        return False
+    hits.append(now)
+    _ASK_HITS[ip] = hits
+    if len(_ASK_HITS) > 5000:  # keep memory bounded
+        _ASK_HITS.clear()
+        _ASK_HITS[ip] = hits
+    return True
+
+
+def _ask_budget_spent() -> int:
+    return _ASK_SPEND.get(datetime.now(timezone.utc).date().isoformat(), 0)
+
+
+def _ask_record_usage(input_tokens: int, output_tokens: int) -> None:
+    today = datetime.now(timezone.utc).date().isoformat()
+    # Read the running total *before* clearing, otherwise the count resets on
+    # every call and the daily cap never fires.
+    total = _ASK_SPEND.get(today, 0) + input_tokens + output_tokens
+    _ASK_SPEND.clear()  # only today's figure matters; drop yesterday's
+    _ASK_SPEND[today] = total
 
 
 def _boom_tooltip_html(prob: float, points_upside: float, stat: str) -> str:
@@ -840,6 +879,73 @@ def about(request: Request, format: str = None, db: Session = Depends(get_db)):
         "active_page": "about",
         "narrow": True,
     })
+
+
+@app.get("/ask")
+def ask_page(request: Request, format: str = None, db: Session = Depends(get_db)):
+    week, is_demo_week = _resolve_week(db, None)
+    scoring_format = _resolve_scoring_format(format)
+    return templates.TemplateResponse("ask.html", {
+        "request": request,
+        "week": week,
+        "is_demo_week": is_demo_week,
+        "scoring_format": scoring_format,
+        "scoring_format_label": SCORING_FORMAT_LABELS[scoring_format],
+        "chat_configured": bool(os.getenv("ANTHROPIC_API_KEY")),
+        "active_page": "ask",
+        "narrow": True,
+    })
+
+
+@app.post("/api/ask")
+async def api_ask(request: Request, format: str = None, db: Session = Depends(get_db)):
+    """Answer one natural-language question about this week's players.
+
+    Unlike every other route on this site, this one spends money per request, so
+    it carries its own limits on top of the global rate limiter: a much tighter
+    per-IP quota and a hard daily token budget that takes the feature offline
+    rather than running up a bill.
+    """
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        raise HTTPException(status_code=503, detail="The assistant is not configured.")
+
+    if not _ask_rate_ok(_client_ip(request)):
+        raise HTTPException(
+            status_code=429,
+            detail=f"You can ask {ASK_MAX_PER_HOUR} questions per hour. Try again later.",
+        )
+    if _ask_budget_spent() >= ASK_DAILY_TOKEN_BUDGET:
+        raise HTTPException(
+            status_code=503,
+            detail="The assistant has hit today's usage limit. Try again tomorrow.",
+        )
+
+    body = await request.json()
+    question = (body or {}).get("question", "")
+    if not isinstance(question, str) or not question.strip():
+        raise HTTPException(status_code=400, detail="Ask a question first.")
+
+    week, _ = _resolve_week(db, None)
+    scoring_format = _resolve_scoring_format(format)
+    rows = _player_rows(db, week, SCORING_RULES[scoring_format], scoring_format)
+
+    try:
+        answer = chat.answer_question(
+            question=question,
+            rows=rows,
+            week=week,
+            scoring_format_label=SCORING_FORMAT_LABELS[scoring_format],
+            on_usage=_ask_record_usage,
+        )
+    except chat.ChatNotConfigured:
+        raise HTTPException(status_code=503, detail="The assistant is not configured.")
+    except Exception:
+        # Never surface the raw exception: like the Odds API path, the message
+        # can carry the API key inside a request URL.
+        logging.exception("Assistant question failed")
+        raise HTTPException(status_code=502, detail="The assistant is unavailable right now.")
+
+    return JSONResponse({"answer": answer})
 
 
 @app.get("/player/{player_id}")
