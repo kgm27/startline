@@ -188,6 +188,7 @@
             {% endif %}
 
             {% if m.books %}
+            <div class="market-scroll">
             <table class="books-table">
                 <thead>
                     <tr>
@@ -205,11 +206,12 @@
                         <td>{{ book.line }}</td>
                         <td>{{ fmt_odds(book.odds) }}</td>
                         <td>{{ fmt_odds(book.under_odds) }}</td>
-                        <td>{{ book.effective_line }}{% if book.under_odds is none %} <span class="note">(no Under price, using raw line)</span>{% endif %}</td>
+                        <td>{{ book.effective_line }}{% if book.under_odds is none %} <span class="note raw-line-note">(no Under price, using raw line)</span>{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+            </div>
             {% endif %}
         </div>
         {% endfor %}

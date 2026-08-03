@@ -488,7 +488,15 @@ a.summary-value:hover, .summary-value.hover-tag:hover { color: var(--accent); }
 
 .markets { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-top: 1rem; }
 
-.market-block { border: 1px solid var(--rule-strong); padding: 0.9rem 1rem 1rem; }
+/* min-width:0 is required: a grid item defaults to min-width:auto and will
+   refuse to shrink below its content, pushing the whole page sideways on a
+   phone. overflow-wrap catches the long "average x rate = points" line. */
+.market-block {
+    border: 1px solid var(--rule-strong);
+    padding: 0.9rem 1rem 1rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
 .market-block h3 { margin: 0; font-size: 14px; }
 .market-summary { display: block; color: var(--muted); font-size: 11.5px; margin-top: 0.35rem; }
 .market-summary strong { color: var(--ink); font-weight: 400; }
@@ -511,6 +519,13 @@ a.summary-value:hover, .summary-value.hover-tag:hover { color: var(--accent); }
 .dfs-table th:not(:first-child), .dfs-table td:not(:first-child) { text-align: right; }
 
 .dfs-table { max-width: 340px; }
+
+/* The per-book table has five columns but now sits inside a narrow market
+   box, so it scrolls within its own container rather than spilling over the
+   card beside it. */
+.market-scroll { overflow-x: auto; }
+.market-scroll table { min-width: 380px; }
+.raw-line-note { display: block; font-size: 10.5px; }
 
 /* ---------- compare ---------- */
 
@@ -808,7 +823,17 @@ a.summary-value:hover, .summary-value.hover-tag:hover { color: var(--accent); }
     opacity: 1;
 }
 
-.trend-chart-wrap .sparkline-pending-message { color: var(--ink); }
+/* On the player page the message sits over a full-width chart, so plain text
+   collides with the plotted line. A paper panel keeps both readable. */
+.trend-chart-wrap .sparkline-pending-message {
+    color: var(--ink);
+    padding: 0.6rem 0.9rem;
+    max-width: 46ch;
+    margin: auto;
+    height: fit-content;
+    background: var(--paper);
+    border: 1px solid var(--rule-strong);
+}
 
 /* ---------- footer ---------- */
 
