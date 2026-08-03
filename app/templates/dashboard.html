@@ -2,7 +2,7 @@
 {% block title %}StartLine - Week {{ week }}{% endblock %}
 {% block content %}
 <div class="page" x-data="dashboard()">
-    {% if is_demo_week %}
+    {% if is_demo_week and rows %}
     <div class="note-banner">
         Demo data: Week {{ week }}, 2025 season. A real backtest, not fabricated numbers, shown because it is
         the off-season and there is no live week to display.
@@ -53,12 +53,12 @@
             </div>
         </div>
 
-        <p class="table-key">
+        {% if rows %}<p class="table-key">
             {{ scoring_format_label }} &middot; sorted by blended score.
             <b>Boxed tags</b> (&#128640; high ceiling, amber injury codes) reveal the numbers behind them on hover or tap.
             <b>Click any row</b> for a full player breakdown, or a <b>column heading</b> to re-sort.
             The small line beside each blended score is its recent trend.
-        </p>
+        </p>{% endif %}
 
         <div class="table-card">
             <table class="dashboard-table">
@@ -112,11 +112,13 @@
                             <td class="go">&rarr;</td>
                         </tr>
                     </template>
+                    {% if rows %}
                     <tr x-show="filteredRows.length === 0">
                         <td colspan="{{ 10 if scoring_format == 'half_ppr' else 9 }}" class="empty-state">
                             No players match your filters.
                         </td>
                     </tr>
+                    {% endif %}
                 </tbody>
             </table>
             {% if not rows %}

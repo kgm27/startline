@@ -291,11 +291,22 @@
                 if (gap < 0.5) {
                     bits.push('That gap is well inside the noise, so treat this as a coin flip on the blended score alone.');
                 }
-                const splits = this.metrics
+                // Group by who wins, so a clean sweep reads "X leads on A and B"
+                // rather than repeating the same name once per metric.
+                const by = {};
+                this.metrics
                     .filter(m => m.key !== 'blended' && this.winner(m.key))
-                    // label as-is: lowercasing turns "DFS Projection" into "dfs projection"
-                    .map(m => `${this.shortName(this.winner(m.key) === 'A' ? this.playerA : this.playerB)} leads on ${m.label}`);
-                if (splits.length) bits.push('Underneath: ' + splits.join(', ') + '.');
+                    .forEach(m => {
+                        const side = this.winner(m.key);
+                        // label as-is: lowercasing turns "DFS Projection" into "dfs projection"
+                        (by[side] = by[side] || []).push(m.label);
+                    });
+                const list = arr => arr.length > 1
+                    ? arr.slice(0, -1).join(', ') + ' and ' + arr[arr.length - 1]
+                    : arr[0];
+                const splits = Object.entries(by).map(([side, labels]) =>
+                    `${escapeHtml(this.shortName(side === 'A' ? this.playerA : this.playerB))} leads on ${list(labels)}`);
+                if (splits.length) bits.push('Underneath: ' + splits.join('; ') + '.');
                 const hurt = [this.playerA, this.playerB].filter(p => p.injury);
                 if (hurt.length) {
                     bits.push(hurt.map(p => `${escapeHtml(this.shortName(p))} carries a ${escapeHtml(p.injury)} tag`).join(' and ') + '.');
