@@ -43,6 +43,23 @@ const INJURY_DEFINITIONS = {
     NA: "Not on the active roster this week for a non-injury reason (e.g., a roster exemption).",
 };
 
+// Short codes for the inline injury tag. Spelling "Questionable" out in a
+// table row costs about as much width as the dedicated column it replaced,
+// so the tag shows the code and the hover carries the full definition.
+const INJURY_CODES = {
+    Questionable: "Q",
+    Doubtful: "D",
+    Out: "OUT",
+    IR: "IR",
+    PUP: "PUP",
+    DNR: "DNR",
+    NA: "NA",
+};
+
+function injuryCode(status) {
+    return INJURY_CODES[status] || status;
+}
+
 // The Odds API's raw bookmaker keys, mapped to how each sportsbook actually
 // writes its own name. Falls back to a title-cased guess for anything not
 // listed here (e.g. a new book The Odds API adds later).
