@@ -2,144 +2,182 @@
 {% block title %}Compare Players - StartLine{% endblock %}
 {% block content %}
 <div class="page" x-data="compare()">
-    <header class="topbar">
-        <div class="topbar-titles">
-            <h1>Compare Players</h1>
-            <p class="subtitle">Week {{ week }} &middot; {{ scoring_format_label }} &middot; head-to-head DFS / betting / blended numbers</p>
-        </div>
-    </header>
+    <h1 class="page-title">Compare players</h1>
+    <p class="subtitle">Two players, side by side, on every number StartLine tracks.
+        Week {{ week }} &middot; {{ scoring_format_label }}.</p>
 
     {% if is_demo_week %}
     <div class="note-banner">
-        Demo data: Week {{ week }}, 2025 season. This is a real backtest (not fabricated numbers), shown because
-        it's the off-season and there's no live week to display. Live data resumes once the season starts.
+        Demo data: Week {{ week }}, 2025 season. A real backtest, not fabricated numbers, shown because it is
+        the off-season and there is no live week to display.
     </div>
     {% endif %}
 
     <div class="compare-pickers">
         <div class="compare-picker-col">
             <template x-if="!playerA">
-                <div class="search-box compare-search">
-                    <input type="text" placeholder="Search for Player A…" x-model="queryA"
-                           @focus="focusA = true" @blur="setTimeout(() => focusA = false, 150)">
-                    <div class="combo-dropdown" x-show="focusA && queryA.trim().length" x-cloak>
-                        <template x-for="r in matches(queryA, playerB)" :key="r.id">
-                            <button type="button" class="combo-item" @mousedown.prevent="selectA(r)">
-                                <span x-text="r.name"></span>
-                                <span class="combo-meta" x-text="r.position + ' · ' + r.team"></span>
-                            </button>
-                        </template>
-                        <div class="combo-empty" x-show="matches(queryA, playerB).length === 0">No players match.</div>
+                <div class="compare-card searching">
+                    <div class="search-box compare-search">
+                        <label class="league-format-label" for="qA">Player A</label>
+                        <input id="qA" type="text" placeholder="Search by name or team…" x-model="queryA"
+                               @focus="focusA = true" @blur="setTimeout(() => focusA = false, 150)">
+                        <div class="combo-dropdown" x-show="focusA && queryA.trim().length" x-cloak>
+                            <template x-for="r in matches(queryA, playerB)" :key="r.id">
+                                <button type="button" class="combo-item" @mousedown.prevent="selectA(r)">
+                                    <span x-text="r.name"></span>
+                                    <span class="combo-meta" x-text="r.position + ' · ' + r.team"></span>
+                                </button>
+                            </template>
+                            <div class="combo-empty" x-show="matches(queryA, playerB).length === 0">No players match.</div>
+                        </div>
                     </div>
                 </div>
             </template>
             <template x-if="playerA">
-                <div class="compare-selected">
-                    <div>
-                        <div class="compare-selected-name" x-text="playerA.name"></div>
-                        <div class="compare-selected-meta" x-text="playerA.position + ' · ' + playerA.team"></div>
+                <div class="compare-card" :class="{ winner: overallWinner() === 'A' }">
+                    <div class="compare-card-top">
+                        <div>
+                            <a class="compare-selected-name" :href="playerHref(playerA)" x-text="playerA.name"></a>
+                            <template x-if="playerA.injury">
+                                <span class="tag tag-injury"
+                                      @mouseenter="showTooltip($event, INJURY_DEFINITIONS[playerA.injury] || escapeHtml(playerA.injury))"
+                                      @mouseleave="hideTooltip()"
+                                      @click.stop="showTooltip($event, INJURY_DEFINITIONS[playerA.injury] || escapeHtml(playerA.injury))"
+                                      x-text="injuryCode(playerA.injury)"></span>
+                            </template>
+                            <template x-if="playerA.boom_flag">
+                                <span class="tag tag-boom"
+                                      @mouseenter="showTooltip($event, playerA.boom_tooltip)"
+                                      @mouseleave="hideTooltip()"
+                                      @click.stop="showTooltip($event, playerA.boom_tooltip)">🚀</span>
+                            </template>
+                            <div class="compare-selected-meta">
+                                <span class="team-badge" :style="teamStyle(playerA.team)" x-text="playerA.team"></span>
+                                <span x-text="playerA.position"></span>
+                            </div>
+                        </div>
+                        <button type="button" class="btn" @click="clearA()">Change</button>
                     </div>
-                    <button type="button" class="compare-change" @click="clearA()">Change</button>
+                    <div class="compare-score" x-text="fmt(playerA.blended)"></div>
+                    <div class="compare-score-label">Blended<span x-show="overallWinner() === 'A'"> &middot; leads</span></div>
                 </div>
             </template>
         </div>
 
-        <button type="button" class="btn compare-swap" @click="swap()" :disabled="!playerA || !playerB" title="Swap players">&#8646;</button>
+        <div class="compare-swap">
+            <button type="button" class="btn" @click="swap()" :disabled="!playerA || !playerB" title="Swap sides">&#8646;</button>
+        </div>
 
         <div class="compare-picker-col">
             <template x-if="!playerB">
-                <div class="search-box compare-search">
-                    <input type="text" placeholder="Search for Player B…" x-model="queryB"
-                           @focus="focusB = true" @blur="setTimeout(() => focusB = false, 150)">
-                    <div class="combo-dropdown" x-show="focusB && queryB.trim().length" x-cloak>
-                        <template x-for="r in matches(queryB, playerA)" :key="r.id">
-                            <button type="button" class="combo-item" @mousedown.prevent="selectB(r)">
-                                <span x-text="r.name"></span>
-                                <span class="combo-meta" x-text="r.position + ' · ' + r.team"></span>
-                            </button>
-                        </template>
-                        <div class="combo-empty" x-show="matches(queryB, playerA).length === 0">No players match.</div>
+                <div class="compare-card searching">
+                    <div class="search-box compare-search">
+                        <label class="league-format-label" for="qB">Player B</label>
+                        <input id="qB" type="text" placeholder="Search by name or team…" x-model="queryB"
+                               @focus="focusB = true" @blur="setTimeout(() => focusB = false, 150)">
+                        <div class="combo-dropdown" x-show="focusB && queryB.trim().length" x-cloak>
+                            <template x-for="r in matches(queryB, playerA)" :key="r.id">
+                                <button type="button" class="combo-item" @mousedown.prevent="selectB(r)">
+                                    <span x-text="r.name"></span>
+                                    <span class="combo-meta" x-text="r.position + ' · ' + r.team"></span>
+                                </button>
+                            </template>
+                            <div class="combo-empty" x-show="matches(queryB, playerA).length === 0">No players match.</div>
+                        </div>
                     </div>
                 </div>
             </template>
             <template x-if="playerB">
-                <div class="compare-selected">
-                    <div>
-                        <div class="compare-selected-name" x-text="playerB.name"></div>
-                        <div class="compare-selected-meta" x-text="playerB.position + ' · ' + playerB.team"></div>
+                <div class="compare-card" :class="{ winner: overallWinner() === 'B' }">
+                    <div class="compare-card-top">
+                        <div>
+                            <a class="compare-selected-name" :href="playerHref(playerB)" x-text="playerB.name"></a>
+                            <template x-if="playerB.injury">
+                                <span class="tag tag-injury"
+                                      @mouseenter="showTooltip($event, INJURY_DEFINITIONS[playerB.injury] || escapeHtml(playerB.injury))"
+                                      @mouseleave="hideTooltip()"
+                                      @click.stop="showTooltip($event, INJURY_DEFINITIONS[playerB.injury] || escapeHtml(playerB.injury))"
+                                      x-text="injuryCode(playerB.injury)"></span>
+                            </template>
+                            <template x-if="playerB.boom_flag">
+                                <span class="tag tag-boom"
+                                      @mouseenter="showTooltip($event, playerB.boom_tooltip)"
+                                      @mouseleave="hideTooltip()"
+                                      @click.stop="showTooltip($event, playerB.boom_tooltip)">🚀</span>
+                            </template>
+                            <div class="compare-selected-meta">
+                                <span class="team-badge" :style="teamStyle(playerB.team)" x-text="playerB.team"></span>
+                                <span x-text="playerB.position"></span>
+                            </div>
+                        </div>
+                        <button type="button" class="btn" @click="clearB()">Change</button>
                     </div>
-                    <button type="button" class="compare-change" @click="clearB()">Change</button>
+                    <div class="compare-score" x-text="fmt(playerB.blended)"></div>
+                    <div class="compare-score-label">Blended<span x-show="overallWinner() === 'B'"> &middot; leads</span></div>
                 </div>
             </template>
         </div>
     </div>
 
     <template x-if="playerA && playerB">
-        <div class="table-card">
-            <table class="compare-table">
-                <thead>
-                    <tr>
-                        <th></th>
-                        <th class="compare-player-head" :class="colClass('A')">
-                            <a :href="'/player/' + playerA.id + '?week={{ week }}&format={{ scoring_format }}'" x-text="playerA.name"></a>
-                            <div class="compare-player-meta">
-                                <span class="team-badge" :style="teamStyle(playerA.team)" x-text="playerA.team"></span>
-                                <span x-text="playerA.position"></span>
-                            </div>
-                            <template x-if="playerA.injury">
-                                <div class="compare-injury-flag"
-                                     @mouseenter="showTooltip($event, INJURY_DEFINITIONS[playerA.injury] || escapeHtml(playerA.injury))"
-                                     @mouseleave="hideTooltip()"
-                                     @click.stop="showTooltip($event, INJURY_DEFINITIONS[playerA.injury] || escapeHtml(playerA.injury))">
-                                    <span x-text="playerA.injury"></span>
+        <div>
+            <div class="share-bar">
+                <span class="share-url" x-text="shareUrl()"></span>
+                <button type="button" class="btn" @click="copyLink()" x-text="copied ? 'Copied' : 'Copy link'"></button>
+            </div>
+
+            <p class="verdict" x-html="verdictHtml()"></p>
+
+            <section class="metrics">
+                <template x-for="m in metrics" :key="m.key">
+                    <div class="metric">
+                        <div class="metric-head" x-text="m.label"></div>
+                        <template x-if="playerA[m.key] == null && playerB[m.key] == null">
+                            <p class="metric-note">Not available for this week.</p>
+                        </template>
+                        <template x-if="!(playerA[m.key] == null && playerB[m.key] == null)">
+                            <div>
+                                <div class="bar-row">
+                                    <span class="bar-name" :class="{ win: winner(m.key) === 'A' }" x-text="shortName(playerA)"></span>
+                                    <span class="bar-track"><i :class="{ on: winner(m.key) === 'A' }" :style="`width:${barPct(playerA[m.key])}%`"></i></span>
+                                    <span class="bar-val" :class="{ win: winner(m.key) === 'A' }" x-text="fmt(playerA[m.key])"></span>
+                                    <span class="bar-delta" x-text="winner(m.key) === 'A' ? '+' + delta(m.key) : ''"></span>
                                 </div>
-                            </template>
-                        </th>
-                        <th class="compare-player-head" :class="colClass('B')">
-                            <a :href="'/player/' + playerB.id + '?week={{ week }}&format={{ scoring_format }}'" x-text="playerB.name"></a>
-                            <div class="compare-player-meta">
-                                <span class="team-badge" :style="teamStyle(playerB.team)" x-text="playerB.team"></span>
-                                <span x-text="playerB.position"></span>
-                            </div>
-                            <template x-if="playerB.injury">
-                                <div class="compare-injury-flag"
-                                     @mouseenter="showTooltip($event, INJURY_DEFINITIONS[playerB.injury] || escapeHtml(playerB.injury))"
-                                     @mouseleave="hideTooltip()"
-                                     @click.stop="showTooltip($event, INJURY_DEFINITIONS[playerB.injury] || escapeHtml(playerB.injury))">
-                                    <span x-text="playerB.injury"></span>
+                                <div class="bar-row">
+                                    <span class="bar-name" :class="{ win: winner(m.key) === 'B' }" x-text="shortName(playerB)"></span>
+                                    <span class="bar-track"><i :class="{ on: winner(m.key) === 'B' }" :style="`width:${barPct(playerB[m.key])}%`"></i></span>
+                                    <span class="bar-val" :class="{ win: winner(m.key) === 'B' }" x-text="fmt(playerB[m.key])"></span>
+                                    <span class="bar-delta" x-text="winner(m.key) === 'B' ? '+' + delta(m.key) : ''"></span>
                                 </div>
-                            </template>
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <template x-for="m in metrics" :key="m.key">
-                        <tr :class="{ 'compare-row-blended': m.key === 'blended' }">
-                            <td x-text="m.label"></td>
-                            <td class="compare-value" :class="[colClass('A'), { 'compare-winner': winner(m.key) === 'A' }]">
-                                <span x-text="fmt(playerA[m.key])"></span>
-                                <span class="compare-delta" x-show="winner(m.key) === 'A'" x-text="'+' + delta(m.key)"></span>
-                            </td>
-                            <td class="compare-value" :class="[colClass('B'), { 'compare-winner': winner(m.key) === 'B' }]">
-                                <span x-text="fmt(playerB[m.key])"></span>
-                                <span class="compare-delta" x-show="winner(m.key) === 'B'" x-text="'+' + delta(m.key)"></span>
-                            </td>
-                        </tr>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+                <div class="metric">
+                    <div class="metric-head">Expert perspective</div>
+                    <template x-if="!playerA.expert && !playerB.expert">
+                        <p class="metric-note">No expert rankings for this week yet.</p>
                     </template>
-                    <tr>
-                        <td>Expert Perspective</td>
-                        <td :class="colClass('A')" x-text="playerA.expert || '—'"></td>
-                        <td :class="colClass('B')" x-text="playerB.expert || '—'"></td>
-                    </tr>
-                </tbody>
-            </table>
+                    <template x-if="playerA.expert || playerB.expert">
+                        <div>
+                            <div class="bar-row">
+                                <span class="bar-name" x-text="shortName(playerA)"></span>
+                                <span x-text="playerA.expert || '—'"></span>
+                            </div>
+                            <div class="bar-row">
+                                <span class="bar-name" x-text="shortName(playerB)"></span>
+                                <span x-text="playerB.expert || '—'"></span>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </section>
+            <p class="axis-note">Every bar runs on the same 0 to <span x-text="AXIS_MAX"></span> point axis, so lengths are directly comparable.</p>
         </div>
     </template>
 
     <template x-if="!(playerA && playerB)">
-        <div class="table-card">
-            <p class="empty-state">Pick two players above to see their DFS, sportsbook, and blended numbers side by side.</p>
-        </div>
+        <p class="empty-state">Pick two players above to see their DFS, sportsbook, and blended numbers side by side.</p>
     </template>
 
     <div class="global-tooltip" :class="{ 'tooltip-visible': tooltipVisible, 'tooltip-above': tooltipAbove }"
@@ -152,6 +190,10 @@
     const ALL_ROWS = {{ rows_json | safe }};
     const INITIAL_A = {{ initial_a_json | safe }};
     const INITIAL_B = {{ initial_b_json | safe }};
+    const WEEK = {{ week }};
+    const FORMAT = {{ scoring_format_json | safe }};
+    // Shared reference axis for every comparison bar, in fantasy points.
+    const AXIS_MAX = 25;
 
     function compare() {
         return {
@@ -209,7 +251,57 @@
                 const qs = params.toString();
                 history.replaceState(null, '', qs ? ('?' + qs) : window.location.pathname);
             },
+            copied: false,
+            AXIS_MAX: AXIS_MAX,
             fmt(value) { return value == null ? '—' : value.toFixed(2); },
+            playerHref(p) { return `/player/${p.id}?week=${WEEK}&format=${FORMAT}`; },
+            // Surnames keep the bar labels narrow; full names are on the cards above.
+            shortName(p) {
+                const parts = p.name.split(' ');
+                return parts.length > 1 ? parts.slice(1).join(' ') : p.name;
+            },
+            // Every bar is drawn against one fixed axis so a longer bar always
+            // means more points, not just "this row's winner".
+            barPct(value) {
+                if (value == null) return 0;
+                return Math.max(0, Math.min(100, (value / AXIS_MAX) * 100));
+            },
+            shareUrl() {
+                const params = new URLSearchParams(window.location.search);
+                if (this.playerA) params.set('a', this.playerA.id); else params.delete('a');
+                if (this.playerB) params.set('b', this.playerB.id); else params.delete('b');
+                const qs = params.toString();
+                return `${window.location.host}${window.location.pathname}${qs ? '?' + qs : ''}`;
+            },
+            copyLink() {
+                const url = `${window.location.protocol}//${this.shareUrl()}`;
+                navigator.clipboard?.writeText(url);
+                this.copied = true;
+                setTimeout(() => this.copied = false, 1600);
+            },
+            // States the call in words. A gap this small is noise, so say so
+            // rather than implying false precision, and point at what actually
+            // separates the two players instead.
+            verdictHtml() {
+                const w = this.overallWinner();
+                if (!w) return '<b>Too close to call.</b> Their blended scores are identical.';
+                const lead = w === 'A' ? this.playerA : this.playerB;
+                const gap = Number(this.delta('blended'));
+                const bits = [`<b>${escapeHtml(lead.name)}, by ${gap.toFixed(2)}.</b>`];
+                if (gap < 0.5) {
+                    bits.push('That gap is well inside the noise, so treat this as a coin flip on the blended score alone.');
+                }
+                const splits = this.metrics
+                    .filter(m => m.key !== 'blended' && this.winner(m.key))
+                    // label as-is: lowercasing turns "DFS Projection" into "dfs projection"
+                    .map(m => `${this.shortName(this.winner(m.key) === 'A' ? this.playerA : this.playerB)} leads on ${m.label}`);
+                if (splits.length) bits.push('Underneath: ' + splits.join(', ') + '.');
+                const hurt = [this.playerA, this.playerB].filter(p => p.injury);
+                if (hurt.length) {
+                    bits.push(hurt.map(p => `${escapeHtml(this.shortName(p))} carries a ${escapeHtml(p.injury)} tag`).join(' and ') + '.');
+                }
+                return bits.join(' ');
+            },
             delta(key) {
                 const av = this.playerA[key], bv = this.playerB[key];
                 if (av == null || bv == null) return '';

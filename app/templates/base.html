@@ -15,19 +15,15 @@
     <meta name="twitter:title" content="{{ self.title() }}">
     <meta name="twitter:description" content="{{ page_description }}">
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v={{ favicon_version }}">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="/static/app.js?v={{ app_js_version }}"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
     <link rel="stylesheet" href="/static/style.css?v={{ style_version }}">
 </head>
 <body>
     <nav class="nav">
-        <div class="nav-inner">
+        <div class="nav-inner{{ ' narrow' if narrow }}">
             <a class="nav-brand" href="/">
-                <span class="nav-logo">SL</span>
-                <span class="nav-wordmark">StartLine</span>
+                <span class="nav-wordmark">Start<span class="mark">Line</span></span>
             </a>
             <div class="nav-links">
                 <a href="/dashboard" class="{{ 'active' if active_page == 'dashboard' else '' }}">Dashboard</a>
@@ -37,5 +33,9 @@
         </div>
     </nav>
     {% block content %}{% endblock %}
+    <footer class="site-footer{{ ' narrow' if narrow }}">
+        <span>Data: The Odds API &middot; Underdog / PrizePicks &middot; FantasyPros &middot; Sleeper</span>
+        <span>getstartline.com</span>
+    </footer>
 </body>
 </html>

@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 {% block title %}About / Methodology - StartLine{% endblock %}
 {% block content %}
-<div class="page">
+<div class="page page-narrow">
     <header class="topbar">
         <div class="topbar-titles">
-            <h1>About / Methodology</h1>
-            <p class="subtitle">How the blended score is built, and why it exists</p>
+            <h1 class="page-title">How the blend works</h1>
+            <p class="subtitle">Three independent views of the same week, and why combining them beats trusting any one.</p>
         </div>
     </header>
 
     <div class="prose">
-        <h2>The problem with trusting one source</h2>
+        <h2 class="section-head">The problem with trusting one source</h2>
         <p>
             DFS pick'em sites like Underdog and PrizePicks publish a projected fantasy-point total for every
             player, every week. Sportsbooks publish betting lines (passing/rushing/receiving yardage props,
@@ -26,7 +26,7 @@
             third, independent lens (expert consensus rankings) visible alongside it rather than folded in.
         </p>
 
-        <h2>Three inputs</h2>
+        <h2 class="section-head">Three inputs</h2>
         <section class="hero-features" style="margin: 1rem 0 1.5rem;">
             <div class="feature-card">
                 <span class="feature-kicker">DFS Projections</span>
@@ -45,7 +45,7 @@
             </div>
         </section>
 
-        <h2>How three inputs become one number</h2>
+        <h2 class="section-head">How they become one number</h2>
         <div class="method-steps">
             <div class="method-step">
                 <div class="method-step-num">1</div>
@@ -90,30 +90,30 @@
         </div>
 
         {% if example %}
-        <h2>A real example</h2>
+        <h2 class="section-head">A real example</h2>
         <p>
 This week's highest {{ scoring_format_label }} blended score belongs to
             <a href="/player/{{ example.id }}?week={{ week }}&format={{ scoring_format }}">{{ example.name }}</a> ({{ example.position }} &middot;
             {{ example.team }}). Here's how that number was built:
         </p>
         <div class="example-callout">
-            <section class="summary-box">
+            <div class="example-nums">
                 {% if scoring_format == 'half_ppr' %}
-                <div>
-                    <span class="summary-label">DFS Projection</span>
-                    <span class="summary-value">{{ "%.2f"|format(example.dfs_pts) if example.dfs_pts is not none else "—" }}</span>
+                <div class="example-cell">
+                    <span class="n">{{ "%.2f"|format(example.dfs_pts) if example.dfs_pts is not none else "—" }}</span>
+                    <span class="k">DFS projection</span>
                 </div>
                 {% endif %}
-                <div>
-                    <span class="summary-label">Sportsbook Projection</span>
-                    <span class="summary-value">{{ "%.2f"|format(example.betting_pts) if example.betting_pts is not none else "—" }}</span>
+                <div class="example-cell">
+                    <span class="n">{{ "%.2f"|format(example.betting_pts) if example.betting_pts is not none else "—" }}</span>
+                    <span class="k">Sportsbook projection</span>
                 </div>
-                <div>
-                    <span class="summary-label">Blended</span>
-                    <span class="summary-value">{{ "%.2f"|format(example.blended) }}</span>
+                <div class="example-cell lead">
+                    <span class="n">{{ "%.2f"|format(example.blended) }}</span>
+                    <span class="k">Blended</span>
                 </div>
-            </section>
-            <p class="note">
+            </div>
+            <p class="example-foot">
                 {% if is_demo_week %}From the Week {{ week }}, 2025 demo dataset: a real backtest, not a
                 fabricated example.{% endif %}
                 <a href="/player/{{ example.id }}?week={{ week }}&format={{ scoring_format }}">See the full per-market breakdown &rarr;</a>
@@ -121,7 +121,7 @@ This week's highest {{ scoring_format_label }} blended score belongs to
         </div>
         {% endif %}
 
-        <h2>This is v1</h2>
+        <h2 class="section-head">This is v1</h2>
         <p>
             The blend above is a straightforward, transparent starting point: a plain average, not a fitted
             model, deliberately simple so every number on this site can be traced back to a real market or a

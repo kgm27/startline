@@ -2,30 +2,32 @@
 {% block title %}{{ player.name }} - Week {{ week }} breakdown{% endblock %}
 {% block content %}
 <div class="page" x-data="playerDetail()">
-    <header class="topbar">
-        <div class="topbar-titles">
-            <a class="back-link" href="/dashboard?week={{ week }}&format={{ scoring_format }}">&larr; Back to dashboard</a>
-            <h1 style="margin-top: 0.4rem;">{{ player.name }}</h1>
-            <p class="subtitle">
-                {{ player.position }} &middot;
-                <span class="team-badge" :style="teamStyle({{ player.team | tojson }})">{{ player.team }}</span>
-                &middot; Week {{ week }}
-                &middot; {{ scoring_format_label }}
-                {% if player.injury_status %}
-                &middot;
-                <span class="hover-tag"
-                      @mouseenter="showTooltip($event, INJURY_DEFINITIONS[{{ player.injury_status | tojson }}] || escapeHtml({{ player.injury_status | tojson }}))"
-                      @mouseleave="hideTooltip()"
-                      @click.stop="showTooltip($event, INJURY_DEFINITIONS[{{ player.injury_status | tojson }}] || escapeHtml({{ player.injury_status | tojson }}))">{{ player.injury_status }}</span>
-                {% endif %}
-            </p>
-        </div>
-    </header>
+    <p style="margin: 0 0 0;"><a class="back-link" href="/dashboard?week={{ week }}&format={{ scoring_format }}">&larr; Back to dashboard</a></p>
+
+    <div class="player-head">
+        <h1>{{ player.name }}</h1>
+        {% if player.injury_status %}
+        <span class="tag tag-injury"
+              @mouseenter="showTooltip($event, INJURY_DEFINITIONS[{{ player.injury_status | tojson }}] || escapeHtml({{ player.injury_status | tojson }}))"
+              @mouseleave="hideTooltip()"
+              @click.stop="showTooltip($event, INJURY_DEFINITIONS[{{ player.injury_status | tojson }}] || escapeHtml({{ player.injury_status | tojson }}))">{{ injury_code }}</span>
+        {% endif %}
+        {% if boom and boom.probability is not none %}
+        <span class="tag tag-boom"
+              @mouseenter="showTooltip($event, {{ boom_tag_tooltip | tojson }})"
+              @mouseleave="hideTooltip()"
+              @click.stop="showTooltip($event, {{ boom_tag_tooltip | tojson }})">🚀</span>
+        {% endif %}
+        <span class="player-meta">
+            <span class="team-badge" :style="teamStyle({{ player.team | tojson }})">{{ player.team }}</span>
+            {{ player.position }} &middot; Week {{ week }} &middot; {{ scoring_format_label }}
+        </span>
+    </div>
 
     {% if is_demo_week %}
     <div class="note-banner">
-        Demo data: Week {{ week }}, 2025 season. This is a real backtest (not fabricated numbers), shown because
-        it's the off-season and there's no live week to display. Live data resumes once the season starts.
+        Demo data: Week {{ week }}, 2025 season. A real backtest, not fabricated numbers, shown because it is
+        the off-season and there is no live week to display.
     </div>
     {% endif %}
 
@@ -52,7 +54,7 @@
             <span class="summary-value">—</span>
             {% endif %}
         </div>
-        <div>
+        <div class="lead">
             <span class="summary-label">Blended</span>
             {% if blended is not none and blended_breakdown %}
             <span class="summary-value hover-tag"
@@ -105,7 +107,7 @@
     </div>
     {% endif %}
 
-    <h2 id="dfs-projections">DFS Projections</h2>
+    <h2 class="section-head" id="dfs-projections">DFS projections</h2>
     {% if scoring_format != 'half_ppr' %}
     <p class="note">DFS Projection isn't shown in {{ scoring_format_label }}: these numbers come pre-scored from
         Underdog/PrizePicks in their own format, and there's no raw stat line behind them to re-score for a
@@ -130,8 +132,9 @@
         {%- if o is none -%}—{%- else -%}{{ "+" if o > 0 else "" }}{{ o }}{%- endif -%}
     {%- endmacro %}
 
-    <h2 id="sportsbook-markets">Sportsbook Markets</h2>
+    <h2 class="section-head" id="sportsbook-markets">Sportsbook markets</h2>
     {% if markets %}
+    <div class="markets">
         {% for m in markets %}
         <div class="market-block" {% if m.thresholds and m.thresholds|length > 6 %}x-data="{ expanded: false }"{% endif %}>
             <h3>{{ m.label }}
@@ -145,11 +148,11 @@
             <table class="books-table">
                 <thead>
                     <tr>
-                        <th>Threshold</th>
-                        <th>Chance of Going Over
+                        <th>Line</th>
+                        <th class="num">Chance over
                             <span class="info-icon" @mouseenter="showTooltip($event, 'Chance the actual result finishes above this threshold, based on real sportsbook odds.')" @mouseleave="hideTooltip()" @click.stop="showTooltip($event, 'Chance the actual result finishes above this threshold, based on real sportsbook odds.')">ⓘ</span>
                         </th>
-                        <th>Books Quoting It</th>
+                        <th class="num">Books</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -181,7 +184,7 @@
             {% if m.thresholds|length > 6 %}
             <button type="button" class="btn" style="margin-top: 0.6rem; font-size: 0.78rem; padding: 0.35rem 0.75rem;"
                     @click="expanded = !expanded"
-                    x-text="expanded ? 'Show fewer thresholds' : 'Show all {{ m.thresholds|length }} thresholds'"></button>
+                    x-text="expanded ? 'Show fewer lines' : 'Show all {{ m.thresholds|length }} lines'"></button>
             {% endif %}
             {% endif %}
 
@@ -211,6 +214,7 @@
             {% endif %}
         </div>
         {% endfor %}
+    </div>
     {% else %}
     <p class="note">No sportsbook props stored for this player/week.</p>
     {% endif %}

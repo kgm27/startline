@@ -2,27 +2,10 @@
 {% block title %}StartLine - Week {{ week }}{% endblock %}
 {% block content %}
 <div class="page" x-data="dashboard()">
-    <header class="topbar">
-        <div class="topbar-titles">
-            <h1>StartLine</h1>
-            <p class="subtitle">Week {{ week }} &middot; {{ scoring_format_label }}</p>
-        </div>
-        <div class="topbar-actions">
-            <div class="league-format-picker">
-                <label for="league-format" class="league-format-label">League Format</label>
-                <select id="league-format" :value="leagueFormat" @change="changeFormat($event.target.value)">
-                    <option value="half_ppr">Half PPR</option>
-                    <option value="standard">Standard</option>
-                    <option value="full_ppr">Full PPR</option>
-                </select>
-            </div>
-        </div>
-    </header>
-
     {% if is_demo_week %}
     <div class="note-banner">
-        Demo data: Week {{ week }}, 2025 season. This is a real backtest (not fabricated numbers), shown because
-        it's the off-season and there's no live week to display. Live data resumes once the season starts.
+        Demo data: Week {{ week }}, 2025 season. A real backtest, not fabricated numbers, shown because it is
+        the off-season and there is no live week to display.
     </div>
     {% endif %}
 
@@ -38,28 +21,24 @@
         <div class="note-banner">{{ note }}</div>
         {% endif %}
 
-        <div class="stat-cards">
-            <div class="stat-card">
-                <div class="stat-value">{{ summary.total }}</div>
-                <div class="stat-label">Players Tracked</div>
+        <section class="season">
+            <div class="season-head">
+                <div class="season-now">Week {{ week }} <span class="of">of {{ total_weeks }}</span></div>
+                <div class="league-format-picker">
+                    <label for="league-format" class="league-format-label">League format</label>
+                    <select id="league-format" :value="leagueFormat" @change="changeFormat($event.target.value)">
+                        <option value="half_ppr">Half PPR</option>
+                        <option value="standard">Standard</option>
+                        <option value="full_ppr">Full PPR</option>
+                    </select>
+                </div>
             </div>
-            <div class="stat-card">
-                <div class="stat-value">{{ summary.qb }}</div>
-                <div class="stat-label">QB</div>
+            <div class="thermo">
+                {% for w in range(1, total_weeks + 1) %}
+                <div class="wk {% if w < week %}done{% elif w == week %}now{% endif %}"><i></i><b>{{ w }}</b></div>
+                {% endfor %}
             </div>
-            <div class="stat-card">
-                <div class="stat-value">{{ summary.rb }}</div>
-                <div class="stat-label">RB</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">{{ summary.wr }}</div>
-                <div class="stat-label">WR</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">{{ summary.te }}</div>
-                <div class="stat-label">TE</div>
-            </div>
-        </div>
+        </section>
 
         <div class="controls">
             <div class="pill-filters">
@@ -74,31 +53,45 @@
             </div>
         </div>
 
-        <p class="boom-legend">🚀 High ceiling: hover the badge next to a player's name for the odds behind it</p>
+        <p class="table-key">
+            {{ scoring_format_label }} &middot; sorted by blended score.
+            <b>Boxed tags</b> (&#128640; high ceiling, amber injury codes) reveal the numbers behind them on hover or tap.
+            <b>Click any row</b> for a full player breakdown, or a <b>column heading</b> to re-sort.
+            The small line beside each blended score is its recent trend.
+        </p>
 
         <div class="table-card">
             <table class="dashboard-table">
                 <thead>
                     <tr>
-                        <th class="sortable" :class="{sorted: sortKey === 'name'}" @click="sortBy('name')">Player <span class="sort-arrow" x-text="arrow('name')"></span></th>
+                        <th></th>
+                        <th class="sortable" :class="{sorted: sortKey === 'name'}" @click="sortBy('name')">Player <span class="sort-cue" x-text="arrow('name')"></span></th>
                         <th>Pos</th>
                         <th>Team</th>
-                        <th>Injury</th>
                         {% if scoring_format == 'half_ppr' %}
-                        <th class="sortable" :class="{sorted: sortKey === 'dfs_pts'}" @click="sortBy('dfs_pts')">DFS Proj. <span class="sort-arrow" x-text="arrow('dfs_pts')"></span></th>
+                        <th class="num sortable" :class="{sorted: sortKey === 'dfs_pts'}" @click="sortBy('dfs_pts')">DFS proj. <span class="sort-cue" x-text="arrow('dfs_pts')"></span></th>
                         {% endif %}
-                        <th class="sortable" :class="{sorted: sortKey === 'betting_pts'}" @click="sortBy('betting_pts')">Sportsbook Proj. <span class="sort-arrow" x-text="arrow('betting_pts')"></span></th>
-                        <th class="sortable" :class="{sorted: sortKey === 'blended'}" @click="sortBy('blended')">Blended <span class="sort-arrow" x-text="arrow('blended')"></span></th>
+                        <th class="num sortable" :class="{sorted: sortKey === 'betting_pts'}" @click="sortBy('betting_pts')">Sportsbook proj. <span class="sort-cue" x-text="arrow('betting_pts')"></span></th>
+                        <th class="num sortable" :class="{sorted: sortKey === 'blended'}" @click="sortBy('blended')">Blended <span class="sort-cue" x-text="arrow('blended')"></span></th>
                         <th>Expert</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
-                    <template x-for="row in filteredRows" :key="row.id">
+                    <template x-for="(row, i) in filteredRows" :key="row.id">
                         <tr>
+                            <td class="rank" x-text="i + 1"></td>
                             <td class="player-cell">
-                                <span class="player-name" x-text="row.name"></span>
+                                <a class="player-name" :href="playerHref(row)" x-text="row.name"></a>
+                                <template x-if="row.injury">
+                                    <span class="tag tag-injury"
+                                          @mouseenter="showTooltip($event, INJURY_DEFINITIONS[row.injury] || escapeHtml(row.injury))"
+                                          @mouseleave="hideTooltip()"
+                                          @click.stop="showTooltip($event, INJURY_DEFINITIONS[row.injury] || escapeHtml(row.injury))"
+                                          x-text="injuryCode(row.injury)"></span>
+                                </template>
                                 <template x-if="row.boom_flag">
-                                    <span class="boom-badge hover-tag"
+                                    <span class="tag tag-boom"
                                           @mouseenter="showTooltipRight($event, row.boom_tooltip)"
                                           @mouseleave="hideTooltip()"
                                           @click.stop="showTooltipRight($event, row.boom_tooltip)">🚀</span>
@@ -106,32 +99,21 @@
                             </td>
                             <td x-text="row.position"></td>
                             <td><span class="team-badge" :style="teamStyle(row.team)" x-text="row.team"></span></td>
-                            <td>
-                                <template x-if="row.injury">
-                                    <span class="hover-tag"
-                                          @mouseenter="showTooltip($event, INJURY_DEFINITIONS[row.injury] || escapeHtml(row.injury))"
-                                          @mouseleave="hideTooltip()"
-                                          @click.stop="showTooltip($event, INJURY_DEFINITIONS[row.injury] || escapeHtml(row.injury))"
-                                          x-text="row.injury"></span>
-                                </template>
-                                <template x-if="!row.injury">
-                                    <span>—</span>
-                                </template>
-                            </td>
                             {% if scoring_format == 'half_ppr' %}
-                            <td x-text="fmt1(row.dfs_pts)"></td>
+                            <td class="num" x-text="fmt1(row.dfs_pts)"></td>
                             {% endif %}
-                            <td x-text="fmt1(row.betting_pts)"></td>
-                            <td>
-                                <a class="blended-link" :href="'/player/' + row.id + '?week={{ week }}&format={{ scoring_format }}'" x-text="fmt1(row.blended)"></a>
+                            <td class="num" x-text="fmt1(row.betting_pts)"></td>
+                            <td class="num">
+                                <a class="blended-link" :href="playerHref(row)" x-text="fmt1(row.blended)"></a>
                                 <span class="row-trend" x-show="row.trend_svg" x-html="row.trend_svg"></span>
                                 <span class="row-trend-empty" x-show="!row.trend_svg">—</span>
                             </td>
                             <td x-text="row.expert || '—'"></td>
+                            <td class="go">&rarr;</td>
                         </tr>
                     </template>
                     <tr x-show="filteredRows.length === 0">
-                        <td colspan="{{ 8 if scoring_format == 'half_ppr' else 7 }}" class="empty-state">
+                        <td colspan="{{ 10 if scoring_format == 'half_ppr' else 9 }}" class="empty-state">
                             No players match your filters.
                         </td>
                     </tr>
@@ -153,6 +135,7 @@
     const ALL_ROWS = {{ rows_json | safe }};
     const INITIAL_POSITION = {{ initial_position_json | safe }};
     const WEEK = {{ week }};
+    const FORMAT = {{ scoring_format_json | safe }};
 
     function dashboard() {
         return {
@@ -180,6 +163,9 @@
             // position filter/search/sort which stay client-side only.
             changeFormat(value) {
                 window.location.href = `/dashboard?week=${WEEK}&format=${value}`;
+            },
+            playerHref(row) {
+                return `/player/${row.id}?week=${WEEK}&format=${FORMAT}`;
             },
             showTooltip(event, text) {
                 const rect = event.target.getBoundingClientRect();

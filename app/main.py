@@ -243,6 +243,52 @@ MAIN_STAT_BY_POSITION = {
 }
 BOOM_MARGIN = 0.30  # "boom" = beating the market's own expectation by 30%+
 
+# Length of the NFL regular season, used to draw the week thermometer on the
+# dashboard. Separate from the 1-30 bound on ?week=, which stays permissive so
+# playoff/edge weeks in the data still resolve.
+REGULAR_SEASON_WEEKS = 18
+
+# Short codes for the inline injury tag, mirroring INJURY_CODES in app.js.
+# Spelling the status out inline costs about as much width as the dedicated
+# column it replaced, so the tag shows the code and the hover carries the
+# full definition.
+INJURY_CODES = {
+    "Questionable": "Q",
+    "Doubtful": "D",
+    "Out": "OUT",
+    "IR": "IR",
+    "PUP": "PUP",
+    "DNR": "DNR",
+    "NA": "NA",
+}
+
+
+def _boom_tooltip_html(prob: float, points_upside: float, stat: str) -> str:
+    """The high-ceiling hover, shared by the dashboard badge and the player page.
+
+    The percentage and points boost are the headline: large, side by side, each
+    labeled so neither number needs the paragraph below to be understood on its
+    own. The explanation is real but secondary, kept small underneath.
+    """
+    stat_label = STAT_LABELS.get(stat, stat)
+    return (
+        '<div class="tooltip-title">High Ceiling</div>'
+        '<div class="boom-tooltip-stats">'
+        '<div class="boom-tooltip-stat">'
+        f'<span class="boom-tooltip-value">{prob * 100:.0f}%</span>'
+        '<span class="boom-tooltip-label">chance</span>'
+        "</div>"
+        '<span class="boom-tooltip-arrow">&rarr;</span>'
+        '<div class="boom-tooltip-stat">'
+        f'<span class="boom-tooltip-value">+{points_upside}</span>'
+        '<span class="boom-tooltip-label">pts upside</span>'
+        "</div>"
+        "</div>"
+        f'<div class="boom-tooltip-detail">Chance of beating the market\'s expected '
+        f"{stat_label.lower()} by {BOOM_MARGIN * 100:.0f}% or more, worth about "
+        f"+{points_upside} fantasy points if it happens.</div>"
+    )
+
 
 def _interpolate_survival(curve, x):
     """Linear interpolation of a survival curve {threshold: P(X > threshold)}
@@ -679,27 +725,8 @@ def _player_rows(db, week, scoring, scoring_format):
         r["boom_flag"] = r["boom_prob"] is not None and cutoff is not None and r["boom_prob"] >= cutoff
         r["boom_tooltip"] = None
         if r["boom_flag"]:
-            stat_label = STAT_LABELS.get(r["boom_stat"], r["boom_stat"])
-            # The percentage and points boost are the headline: large,
-            # side by side, each labeled so neither number needs the
-            # paragraph below to be understood on its own. The explanation
-            # is real but secondary, kept small underneath.
-            r["boom_tooltip"] = (
-                '<div class="tooltip-title">High Ceiling</div>'
-                '<div class="boom-tooltip-stats">'
-                '<div class="boom-tooltip-stat">'
-                f'<span class="boom-tooltip-value">{r["boom_prob"] * 100:.0f}%</span>'
-                '<span class="boom-tooltip-label">chance</span>'
-                "</div>"
-                '<span class="boom-tooltip-arrow">&rarr;</span>'
-                '<div class="boom-tooltip-stat">'
-                f'<span class="boom-tooltip-value">+{r["boom_points_upside"]}</span>'
-                '<span class="boom-tooltip-label">pts upside</span>'
-                "</div>"
-                "</div>"
-                f'<div class="boom-tooltip-detail">Chance of beating the market\'s expected '
-                f"{stat_label.lower()} by {BOOM_MARGIN * 100:.0f}% or more, worth about "
-                f"+{r['boom_points_upside']} fantasy points if it happens.</div>"
+            r["boom_tooltip"] = _boom_tooltip_html(
+                r["boom_prob"], r["boom_points_upside"], r["boom_stat"]
             )
 
     rows.sort(key=lambda r: r["blended"], reverse=True)
@@ -746,6 +773,7 @@ def dashboard(request: Request, week: int = None, position: str = None, note: st
         "rows": rows,
         "rows_json": _script_safe_json(rows),
         "initial_position_json": _script_safe_json(position.upper() if position else "All"),
+        "scoring_format_json": _script_safe_json(scoring_format),
         "summary": summary,
         "week": week,
         "position": position,
@@ -756,6 +784,7 @@ def dashboard(request: Request, week: int = None, position: str = None, note: st
         "note": note,
         "active_page": "dashboard",
         "is_demo_week": is_demo_week,
+        "total_weeks": REGULAR_SEASON_WEEKS,
     })
 
 
@@ -781,6 +810,7 @@ def compare(request: Request, week: int = None, a: str = None, b: str = None, fo
         "week": week,
         "is_demo_week": is_demo_week,
         "scoring_format": scoring_format,
+        "scoring_format_json": _script_safe_json(scoring_format),
         "scoring_format_label": SCORING_FORMAT_LABELS[scoring_format],
         "active_page": "compare",
     })
@@ -808,6 +838,7 @@ def about(request: Request, format: str = None, db: Session = Depends(get_db)):
         "scoring_format": scoring_format,
         "scoring_format_label": SCORING_FORMAT_LABELS[scoring_format],
         "active_page": "about",
+        "narrow": True,
     })
 
 
@@ -1058,6 +1089,11 @@ def player_detail(request: Request, player_id: str, week: int = None, format: st
         "headline_trend": headline_trend,
         "headline_trend_json": _script_safe_json(headline_trend),
         "boom": boom,
+        "boom_tag_tooltip": (
+            _boom_tooltip_html(boom["probability"], boom["points_upside"], boom["stat"])
+            if boom and boom.get("probability") is not None else None
+        ),
+        "injury_code": INJURY_CODES.get(player.injury_status, player.injury_status),
         "is_demo_week": is_demo_week,
         "scoring_format": scoring_format,
         "scoring_format_label": SCORING_FORMAT_LABELS[scoring_format],
