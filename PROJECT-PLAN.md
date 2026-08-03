@@ -857,3 +857,32 @@ a cheap **daily** headline pull (feeds the Phase 3B trend chart) and the fuller 
   no room on the right) had no floor, and nobody could ever trigger this tooltip on mobile before today to notice.
   Added a viewport clamp to `showTooltipRight` and to the plain centered `showTooltip` in all three templates.
   Verified on a 375px viewport: tap opens the tooltip fully on-screen, tap elsewhere closes it.
+- 2026-08-02 — Redesigned the whole site on a new typographic design system (owner picked the
+  pi.website look, blue accent instead of theirs). Mocked up all five pages first, iterated on
+  them, then rebuilt the real templates and stylesheet. Shipped to getstartline.com and verified
+  live: every route 200, no console errors, 374 players still load, filters/search/sort/tooltips
+  all work, scoring untouched (app/scoring/ has zero changes), all pages fit 375px.
+  Notable changes: position counts replaced with an 18-week thermometer; injury moved from its
+  own column to an inline amber tag; a consistent affordance grammar (boxed tag = hover for
+  detail, blue = clickable, faint sort cues, row-hover arrow) after owner flagged that nobody
+  would know what was interactive; Compare rebuilt around player cards, a generated verdict
+  sentence, and labeled bars on a shared 25-point axis; About moved to a narrower reading column.
+  Bugs found and fixed along the way, each caught by testing rather than assumption: the error
+  page rendered its status code with a class the new stylesheet hides (404/500 showed no code);
+  keyboard focus rings were dropped in the rewrite; a week with no data showed two contradictory
+  empty-state messages; market boxes overflowed and collided on players with sparse data; and a
+  CSS grid item defaulted to min-width:auto and pushed the phone layout 93px sideways.
+- 2026-08-02 — Built a natural-language "Ask" tab as a LOCAL PROTOTYPE (committed to main, NOT
+  pushed, not live). Answers start/sit questions in plain English. Architecture: the model gets
+  one tool, lookup_players, reading the same _player_rows() output the Dashboard renders, and the
+  system prompt forbids stating any number that did not come from that tool, so it cannot invent
+  a projection or disagree with the rest of the site. Model: claude-haiku-4-5 (~$0.005/question).
+  Because this is the first endpoint that spends money per request, it has its own limits rather
+  than relying on the site-wide rate limiter: 5 questions/hour/IP, a hard daily token budget that
+  takes the feature offline rather than overspending, a 3-round cap on the tool loop, and a
+  500-character question cap. Degrades cleanly with no key (page says "not configured", endpoint
+  503s). Verified without a key: fuzzy name matching, returned numbers match the dashboard
+  exactly, unknown names reported not guessed, both cost controls, the runaway-loop cap, the
+  refusal path, and 375px/1200px layout. 🔴 UNTESTED: the live model call, pending an Anthropic
+  API key. To finish: owner creates a key at console.anthropic.com (prepaid, $5 minimum, roughly
+  1,000 questions), adds ANTHROPIC_API_KEY to .env, restart. Owner paused here 2026-08-02.
