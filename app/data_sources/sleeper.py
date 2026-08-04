@@ -10,6 +10,7 @@ import httpx
 
 from app.db import SessionLocal
 from app.models import Player
+from app.name_utils import normalize_name
 
 SLEEPER_PLAYERS_URL = "https://api.sleeper.app/v1/players/nfl"
 SLEEPER_STATE_URL = "https://api.sleeper.app/v1/state/nfl"
@@ -52,6 +53,7 @@ def sync_players(db: SessionLocal = None) -> int:
 
             if existing:
                 existing.name = full_name
+                existing.normalized_name = normalize_name(full_name)
                 existing.team = data.get("team")
                 existing.position = position
                 existing.injury_status = data.get("injury_status")
@@ -60,6 +62,7 @@ def sync_players(db: SessionLocal = None) -> int:
                 db.add(Player(
                     id=player_id,
                     name=full_name,
+                    normalized_name=normalize_name(full_name),
                     team=data.get("team"),
                     position=position,
                     injury_status=data.get("injury_status"),

@@ -24,32 +24,19 @@ from app.config import get_settings
 from app.db import SessionLocal
 from app.models import Player, OddsProp, DfsProjection
 from app.data_sources.sleeper import fetch_current_week
+from app.name_utils import normalize_name
 
 BASE_URL = "https://api.the-odds-api.com/v4"
 SPORT = "americanfootball_nfl"
 
-# The Odds API and Sleeper don't always agree on generational suffixes (e.g.
-# "Kenneth Walker III" vs Sleeper's "Kenneth Walker"), which made an exact
-# name match silently drop that player from every source everywhere on the
-# site. Stripped as a fallback only, after an exact match has already failed.
-_NAME_SUFFIX_RE = re.compile(r"\s+(Jr\.?|Sr\.?|II|III|IV)$", re.IGNORECASE)
-
-
-def _strip_name_suffix(name: str) -> str:
-    return _NAME_SUFFIX_RE.sub("", name).strip()
-
 
 def _find_player(db, player_name: str):
-    """Match a player by name, tolerating a generational suffix mismatch
-    between data sources. Exact match first (the common, indexed-friendly
-    path); only falls back to a suffix-stripped match if that fails."""
-    player = db.query(Player).filter(Player.name.ilike(player_name)).first()
-    if player:
-        return player
-    stripped = _strip_name_suffix(player_name)
-    if stripped != player_name:
-        player = db.query(Player).filter(Player.name.ilike(stripped)).first()
-    return player
+    """Match a player by name via the shared normalized form (see
+    app/name_utils.py), so a suffix, punctuation, or casing mismatch between
+    this API's naming and Sleeper's (e.g. "Kenneth Walker III" vs "Kenneth
+    Walker") doesn't silently drop that player from every source on the
+    site."""
+    return db.query(Player).filter(Player.normalized_name == normalize_name(player_name)).first()
 
 # Historical odds snapshots are for a fixed past moment, so they never
 # change — safe (and cheap) to cache on disk forever. Live endpoints are

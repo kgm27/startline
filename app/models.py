@@ -9,6 +9,7 @@ class Player(Base):
 
     id = Column(String, primary_key=True)  # Sleeper's player_id
     name = Column(String, nullable=False)
+    normalized_name = Column(String, index=True)  # see app/name_utils.py
     team = Column(String)
     position = Column(String, index=True)  # QB/RB/WR/TE
     injury_status = Column(String)  # None, Questionable, Doubtful, Out, IR

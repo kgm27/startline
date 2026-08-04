@@ -6,3 +6,4 @@ python-dotenv==1.2.1
 httpx==0.28.1
 python-multipart==0.0.20
 anthropic==0.120.2
+rapidfuzz==3.13.0

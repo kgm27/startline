@@ -11,12 +11,14 @@ from fastapi import FastAPI, Request, Depends, HTTPException, Header
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.db import Base, engine, get_db
+from app.db import Base, engine, get_db, SessionLocal
 from app.models import Player, DfsProjection, OddsProp, ExpertRank, ThresholdSnapshot, PredictionSnapshot
+from app.name_utils import normalize_name
 from app.config import get_settings
 from app.data_sources.sleeper import sync_players, fetch_current_week
 from app.data_sources.odds_api import sync_odds, DFS_SOURCE_LABELS
@@ -42,6 +44,33 @@ from app.scoring.config import SCORING_RULES
 from app import chat
 
 Base.metadata.create_all(bind=engine)
+
+
+def _ensure_normalized_name_column() -> None:
+    """`create_all` only creates missing tables, not columns on an existing
+    one, so the `players` table on an already-running deploy needs this
+    added by hand the first time this code runs there. Safe to call on
+    every startup: no-ops once the column exists."""
+    columns = {c["name"] for c in inspect(engine).get_columns("players")}
+    if "normalized_name" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE players ADD COLUMN normalized_name VARCHAR"))
+
+
+def _backfill_normalized_names() -> None:
+    db = SessionLocal()
+    try:
+        stale = db.query(Player).filter(Player.normalized_name.is_(None)).all()
+        for player in stale:
+            player.normalized_name = normalize_name(player.name)
+        if stale:
+            db.commit()
+    finally:
+        db.close()
+
+
+_ensure_normalized_name_column()
+_backfill_normalized_names()
 
 # Basic per-IP rate limiting (Phase 5.2) so a stranger can't hammer the
 # public pages. In-memory, fixed-window: this app runs as a single
@@ -928,11 +957,17 @@ async def api_ask(request: Request, format: str = None, db: Session = Depends(ge
     week, _ = _resolve_week(db, None)
     scoring_format = _resolve_scoring_format(format)
     rows = _player_rows(db, week, SCORING_RULES[scoring_format], scoring_format)
+    # Every active skill-position player, not just ones with data this week —
+    # a benched or bye-week player still needs to be recognized by name so we
+    # can honestly say "no data" instead of the assistant not knowing who
+    # they are at all.
+    all_players = [{"id": p.id, "name": p.name} for p in db.query(Player).all()]
 
     try:
         answer = chat.answer_question(
             question=question,
             rows=rows,
+            all_players=all_players,
             week=week,
             scoring_format_label=SCORING_FORMAT_LABELS[scoring_format],
             on_usage=_ask_record_usage,
