@@ -939,6 +939,13 @@ async def api_ask(request: Request, format: str = None, db: Session = Depends(ge
         )
     except chat.ChatNotConfigured:
         raise HTTPException(status_code=503, detail="The assistant is not configured.")
+    except chat.ChatAuthFailed:
+        # Say which half is wrong. The key itself is never echoed.
+        logging.error("Anthropic rejected the configured API key")
+        raise HTTPException(
+            status_code=503,
+            detail="The assistant's API key was rejected. Check ANTHROPIC_API_KEY.",
+        )
     except Exception:
         # Never surface the raw exception: like the Odds API path, the message
         # can carry the API key inside a request URL.

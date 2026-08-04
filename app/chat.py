@@ -79,6 +79,16 @@ class ChatNotConfigured(Exception):
     """Raised when no Anthropic API key is available."""
 
 
+class ChatAuthFailed(Exception):
+    """Raised when the key is present but Anthropic rejects it.
+
+    Worth distinguishing from a generic failure: the usual cause is a stray
+    space, newline, or quote picked up when pasting the key into a hosting
+    provider's environment-variable form, and a generic "unavailable" message
+    sends you looking in the wrong place.
+    """
+
+
 def _match(rows: list[dict], query: str) -> dict | None:
     """Find a player by a loosely-typed name.
 
@@ -137,25 +147,32 @@ def answer_question(
     """
     import anthropic
 
-    if not os.getenv("ANTHROPIC_API_KEY"):
+    # Strip whitespace and stray quotes: the usual mistake when pasting a key
+    # into a hosting provider's environment-variable form is a trailing newline
+    # or a wrapping quote, both of which Anthropic rejects as an invalid key.
+    api_key = (os.getenv("ANTHROPIC_API_KEY") or "").strip().strip('"').strip("'")
+    if not api_key:
         raise ChatNotConfigured("ANTHROPIC_API_KEY is not set")
 
     question = question.strip()[:MAX_QUESTION_CHARS]
     if not question:
         return "Ask me something about this week's players."
 
-    client = anthropic.Anthropic()
+    client = anthropic.Anthropic(api_key=api_key)
     system = f"{SYSTEM_PROMPT}\nThe site is currently showing Week {week}, {scoring_format_label}."
     messages = [{"role": "user", "content": question}]
 
     for _ in range(MAX_TOOL_ROUNDS):
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=MAX_TOKENS,
-            system=system,
-            tools=TOOLS,
-            messages=messages,
-        )
+        try:
+            response = client.messages.create(
+                model=MODEL,
+                max_tokens=MAX_TOKENS,
+                system=system,
+                tools=TOOLS,
+                messages=messages,
+            )
+        except anthropic.AuthenticationError as exc:
+            raise ChatAuthFailed(str(exc)) from exc
         if on_usage:
             on_usage(response.usage.input_tokens, response.usage.output_tokens)
 
