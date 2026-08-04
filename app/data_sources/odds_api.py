@@ -28,6 +28,29 @@ from app.data_sources.sleeper import fetch_current_week
 BASE_URL = "https://api.the-odds-api.com/v4"
 SPORT = "americanfootball_nfl"
 
+# The Odds API and Sleeper don't always agree on generational suffixes (e.g.
+# "Kenneth Walker III" vs Sleeper's "Kenneth Walker"), which made an exact
+# name match silently drop that player from every source everywhere on the
+# site. Stripped as a fallback only, after an exact match has already failed.
+_NAME_SUFFIX_RE = re.compile(r"\s+(Jr\.?|Sr\.?|II|III|IV)$", re.IGNORECASE)
+
+
+def _strip_name_suffix(name: str) -> str:
+    return _NAME_SUFFIX_RE.sub("", name).strip()
+
+
+def _find_player(db, player_name: str):
+    """Match a player by name, tolerating a generational suffix mismatch
+    between data sources. Exact match first (the common, indexed-friendly
+    path); only falls back to a suffix-stripped match if that fails."""
+    player = db.query(Player).filter(Player.name.ilike(player_name)).first()
+    if player:
+        return player
+    stripped = _strip_name_suffix(player_name)
+    if stripped != player_name:
+        player = db.query(Player).filter(Player.name.ilike(stripped)).first()
+    return player
+
 # Historical odds snapshots are for a fixed past moment, so they never
 # change — safe (and cheap) to cache on disk forever. Live endpoints are
 # NOT cached here: those genuinely change between calls, and caching them
@@ -289,7 +312,7 @@ def _ingest_sportsbook_props(db, event_odds: dict, week: int, now: datetime) -> 
                     if not player_name:
                         continue
                     odds = outcome.get("price")
-                    player = db.query(Player).filter(Player.name.ilike(player_name)).first()
+                    player = _find_player(db, player_name)
                     if not player:
                         unmatched.add(player_name)
                         continue
@@ -319,7 +342,7 @@ def _ingest_sportsbook_props(db, event_odds: dict, week: int, now: datetime) -> 
                     continue  # need at least the Over side for a price at this threshold
                 under = sides.get("Under")
 
-                player = db.query(Player).filter(Player.name.ilike(player_name)).first()
+                player = _find_player(db, player_name)
                 if not player:
                     unmatched.add(player_name)
                     continue
@@ -391,7 +414,7 @@ def _ingest_dfs_projections(db, event_odds: dict, week: int, now: datetime) -> t
                 if not player_name or outcome.get("name") != "Over":
                     continue  # Under side isn't needed for a point estimate
 
-                player = db.query(Player).filter(Player.name.ilike(player_name)).first()
+                player = _find_player(db, player_name)
                 if not player:
                     unmatched.add(player_name)
                     continue

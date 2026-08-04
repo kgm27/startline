@@ -89,11 +89,20 @@ class ChatAuthFailed(Exception):
     """
 
 
+
+# Initialism nicknames people actually type that no substring/surname match
+# can catch (the letters aren't in the player's name at all).
+_NICKNAMES = {
+    "cmc": "christian mccaffrey",
+}
+
+
 def _match(rows: list[dict], query: str) -> dict | None:
     """Find a player by a loosely-typed name.
 
-    People write "Dak", "burrow", "CMC". Exact match first, then a
-    case-insensitive substring on the full name, then on the surname alone.
+    People write "Dak", "burrow", "CMC". Exact match first, then a known
+    nickname, then a case-insensitive substring on the full name, then the
+    surname alone.
     """
     q = query.strip().lower()
     if not q:
@@ -101,6 +110,11 @@ def _match(rows: list[dict], query: str) -> dict | None:
     for r in rows:
         if r["name"].lower() == q:
             return r
+    if q in _NICKNAMES:
+        target = _NICKNAMES[q]
+        for r in rows:
+            if r["name"].lower() == target:
+                return r
     for r in rows:
         if q in r["name"].lower():
             return r
