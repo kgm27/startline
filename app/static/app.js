@@ -121,8 +121,10 @@ function escapeHtml(str) {
 // Builds the "Books Quoting It" tooltip: a small table titled with the prop
 // itself (e.g. "Over 14.5 yds") so each book's price reads on its own line
 // without needing an "Over" label repeated per row. Shows each book's own
-// odds alongside the implied probability those odds represent, so it reads
-// consistently with the percentage shown in the main table.
+// odds alongside the RAW implied probability those odds represent — raw on
+// purpose, since this is showing exactly what that book posted, not our
+// estimate. It will not match the de-vigged percentage in the main table;
+// that's expected, not a bug (see the "Chance over" column's own tooltip).
 function booksTooltipHtml(books, title) {
     if (!books || !books.length) return '';
     const rows = books.map(b => {
@@ -133,7 +135,7 @@ function booksTooltipHtml(books, title) {
             + `<td>${pctText}</td></tr>`;
     }).join('');
     return `<div class="tooltip-title">${escapeHtml(title)}</div>`
-        + `<table class="tooltip-table"><thead><tr><th></th><th>Odds</th><th>Implied</th></tr></thead>`
+        + `<table class="tooltip-table"><thead><tr><th></th><th>Odds</th><th>Implied (raw)</th></tr></thead>`
         + `<tbody>${rows}</tbody></table>`;
 }
 

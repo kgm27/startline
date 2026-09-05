@@ -237,23 +237,30 @@ METHOD_INFO = {
     "discrete": (
         "Exact count",
         "Every threshold's probability adds up directly to the expected count, "
-        "no distribution assumed, just market-implied probabilities added together.",
+        "no distribution assumed, just market-implied probabilities added together. "
+        "De-vigged: the bookmaker's built-in margin is removed from every threshold "
+        "before it's used, either directly (main lines quote both sides) or by "
+        "applying that same book's own margin to its Over-only alternate lines.",
     ),
     "trapezoidal": (
         "Estimated from odds",
         "A curve connecting these threshold probabilities, assuming a 100% chance of "
         "at least zero up through the highest line quoted. Anything beyond the highest "
-        "threshold isn't counted: a small, one-directional underestimate.",
+        "threshold isn't counted: a small, one-directional underestimate. De-vigged, "
+        "same as the exact-count method above.",
     ),
     "legacy_probability": (
         "Estimated (limited data)",
         "Older data: averaged the raw market probability directly, since no threshold "
-        "detail was stored for this stat yet.",
+        "detail was stored for this stat yet. NOT de-vigged: these rows predate "
+        "storing both sides of the price, so there's nothing to de-vig against, and "
+        "this number runs slightly high as a result.",
     ),
     "fallback": (
         "Price-adjusted average",
         "Not enough threshold data to build a curve, so each book's line is nudged "
-        "based on its price instead of averaged as-is.",
+        "based on its price instead of averaged as-is. De-vigged before the nudge is "
+        "computed, same as the curve-based methods.",
     ),
 }
 

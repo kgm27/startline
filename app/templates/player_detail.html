@@ -149,9 +149,11 @@
                     <tr>
                         <th>Line</th>
                         <th class="num">Chance over
-                            <span class="info-icon" @mouseenter="showTooltip($event, 'Chance the actual result finishes above this threshold, based on real sportsbook odds.')" @mouseleave="hideTooltip()" @click.stop="showTooltip($event, 'Chance the actual result finishes above this threshold, based on real sportsbook odds.')">ⓘ</span>
+                            <span class="info-icon" @mouseenter="showTooltip($event, 'Chance the actual result finishes above this threshold, based on real sportsbook odds with the bookmaker\'s built-in margin (the vig) removed.')" @mouseleave="hideTooltip()" @click.stop="showTooltip($event, 'Chance the actual result finishes above this threshold, based on real sportsbook odds with the bookmaker\'s built-in margin (the vig) removed.')">ⓘ</span>
                         </th>
-                        <th class="num">Books</th>
+                        <th class="num">Books
+                            <span class="info-icon" @mouseenter="showTooltip($event, 'Each book\'s own raw price for this line, exactly as quoted — not de-vigged, since this is showing what that book actually posted, not our estimate.')" @mouseleave="hideTooltip()" @click.stop="showTooltip($event, 'Each book\'s own raw price for this line, exactly as quoted — not de-vigged, since this is showing what that book actually posted, not our estimate.')">ⓘ</span>
+                        </th>
                     </tr>
                 </thead>
                 <tbody>

@@ -111,20 +111,58 @@ def _effective_line(prop: OddsProp, cv: float) -> float:
     return _price_adjusted_line(prop.line, prop.odds, prop.under_odds, cv)
 
 
+def _bookmaker_vig_factors(props: list[OddsProp]) -> dict:
+    """Each bookmaker's own overround for this stat (P(Over)+P(Under) from
+    raw implied probability — 1.0 would be a fair, no-margin market),
+    measured from whichever of its thresholds quoted both sides. In
+    practice that's almost always just the main line: alternate-line
+    thresholds are Over-only in the real market, so they never carry their
+    own Under price to de-vig against directly. A book's margin is
+    consistent across one market's whole threshold ladder, so this same
+    factor is reused to de-vig that book's Over-only alternates too."""
+    by_bookmaker = {}
+    for prop in props:
+        if prop.odds is not None and prop.under_odds is not None:
+            by_bookmaker.setdefault(prop.bookmaker, []).append(prop)
+
+    factors = {}
+    for bookmaker, bprops in by_bookmaker.items():
+        totals = [
+            american_odds_to_implied_probability(p.odds) + american_odds_to_implied_probability(p.under_odds)
+            for p in bprops
+        ]
+        factors[bookmaker] = sum(totals) / len(totals)
+    return factors
+
+
 def _pooled_survival_curve(props: list[OddsProp]) -> dict:
-    """Pools every book's threshold data for one stat into a single curve:
-    for each distinct threshold value, the average raw Over-implied
-    probability across whichever books quoted it. Alternate-line markets
-    are Over-only, so most thresholds have no Under side to de-vig
-    against — using raw implied probabilities uniformly at every point
-    keeps the curve internally consistent, at the cost of each point
-    running slightly high due to un-removed vig (same caveat the TD
-    markets always had)."""
+    """Pools every book's threshold data for one stat into a single
+    de-vigged curve: for each distinct threshold, the average de-vigged
+    Over probability across whichever books quoted it.
+
+    A main-line threshold has both an Over and Under price from the same
+    book, so it's de-vigged directly and exactly (_devig_over_probability).
+    An alternate-line threshold is Over-only, so there's no same-point
+    Under to de-vig against — it's adjusted instead by that same
+    bookmaker's own overround, measured from whichever of its thresholds
+    for this stat DID quote both sides (see _bookmaker_vig_factors). A
+    book with no two-sided reference at all for this stat (rare — it would
+    mean that book only ever posted alternates, never a main line) falls
+    back to the average overround of whichever other books in this pool
+    do have one; only if none do is that book's probability left raw."""
+    vig_factors = _bookmaker_vig_factors(props)
+    known_factors = list(vig_factors.values())
+    pool_default_factor = sum(known_factors) / len(known_factors) if known_factors else 1.0
+
     by_threshold = {}
     for prop in props:
         if prop.line is None or prop.odds is None:
             continue
-        p = american_odds_to_implied_probability(prop.odds)
+        if prop.under_odds is not None:
+            p = _devig_over_probability(prop.odds, prop.under_odds)
+        else:
+            factor = vig_factors.get(prop.bookmaker, pool_default_factor)
+            p = american_odds_to_implied_probability(prop.odds) / factor
         by_threshold.setdefault(prop.line, []).append(p)
     return {threshold: sum(ps) / len(ps) for threshold, ps in by_threshold.items()}
 
