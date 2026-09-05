@@ -84,6 +84,7 @@ const BOOKMAKER_NAMES = {
     prizepicks: "PrizePicks",
     underdog: "Underdog",
     betr_us_dfs: "Betr",
+    kalshi: "Kalshi",
     pick6: "DraftKings Pick6",
 };
 
@@ -128,10 +129,14 @@ function escapeHtml(str) {
 function booksTooltipHtml(books, title) {
     if (!books || !books.length) return '';
     const rows = books.map(b => {
-        const pct = impliedProbability(b.odds);
+        // A source with no American odds at all (Kalshi) prices probability
+        // directly — show that price rather than "—" for Odds.
+        const hasOdds = b.odds !== null && b.odds !== undefined;
+        const pct = hasOdds ? impliedProbability(b.odds) : b.implied_probability;
         const pctText = pct == null ? '—' : (pct * 100).toFixed(1) + '%';
+        const oddsText = hasOdds ? escapeHtml(fmtOdds(b.odds)) : 'market price';
         return `<tr><td>${escapeHtml(bookName(b.bookmaker))}</td>`
-            + `<td>${escapeHtml(fmtOdds(b.odds))}</td>`
+            + `<td>${oddsText}</td>`
             + `<td>${pctText}</td></tr>`;
     }).join('');
     return `<div class="tooltip-title">${escapeHtml(title)}</div>`

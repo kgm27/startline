@@ -27,3 +27,16 @@ def normalize_name(name: str) -> str:
     n = _SPACE_RE.sub(" ", n).strip()
     n = _SUFFIX_RE.sub("", n).strip()
     return n
+
+
+def find_player_by_name(db, name: str):
+    """Match a player by name via the normalized form above. Shared by
+    every data source that identifies a player by a plain-text name rather
+    than a Sleeper ID (The Odds API, Kalshi) — a single implementation so a
+    suffix/punctuation/casing fix made for one source applies to all of
+    them, instead of drifting apart per source the way it already did once."""
+    from app.models import Player  # deferred: avoids a circular import at module load
+
+    if not name:
+        return None
+    return db.query(Player).filter(Player.normalized_name == normalize_name(name)).first()

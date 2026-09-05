@@ -9,9 +9,10 @@
         <h2 class="section-head">The problem with trusting one source</h2>
         <p>
             DFS pick'em sites like Underdog and PrizePicks publish a projected fantasy-point total for every
-            player, every week. Sportsbooks publish betting lines (passing/rushing/receiving yardage props,
-            anytime-touchdown odds, game totals) that imply their own view of how a player will perform.
-            Both are independently pretty good at this. They also don't always agree.
+            player, every week. Sportsbooks and real-money prediction markets like Kalshi publish betting
+            lines and contract prices (passing/rushing/receiving yardage props, anytime-touchdown odds, game
+            totals) that imply their own view of how a player will perform. Both are independently pretty
+            good at this. They also don't always agree.
         </p>
         <p>
             When two differently-built systems (one a projections desk, one a real market where people bet
@@ -30,9 +31,10 @@
                     averaged together.</p>
             </div>
             <div class="feature-card">
-                <span class="feature-kicker">Sportsbook Lines</span>
-                <p>Real player-prop lines and odds from US sportsbooks (via The Odds API), converted into an
-                    expected fantasy-point total using the market's own implied probabilities.</p>
+                <span class="feature-kicker">Sportsbook &amp; Market Odds</span>
+                <p>Real player-prop lines and odds from US sportsbooks (via The Odds API) and real-money
+                    prediction-market contracts (Kalshi), converted into an expected fantasy-point total
+                    using the market's own implied probabilities.</p>
             </div>
             <div class="feature-card">
                 <span class="feature-kicker">Expert Rankings</span>
@@ -60,8 +62,11 @@
                         A yardage or reception line becomes an expected-value estimate from the market's own
                         quoted probabilities at every threshold a book offers, not just the single headline
                         number. Touchdown odds are converted from betting odds into an implied probability and
-                        multiplied by the points a touchdown is worth. Game total and spread are shown for
-                        context (blowout risk, game script) rather than folded directly into the estimate.</p>
+                        multiplied by the points a touchdown is worth. Kalshi's real-money prediction-market
+                        contracts price the same questions directly as a probability and are pooled in
+                        alongside the sportsbooks, not shown as a separate number. Game total and spread are
+                        shown for context (blowout risk, game script) rather than folded directly into the
+                        estimate.</p>
                 </div>
             </div>
             <div class="method-step">

@@ -149,20 +149,31 @@ def _pooled_survival_curve(props: list[OddsProp]) -> dict:
     book with no two-sided reference at all for this stat (rare — it would
     mean that book only ever posted alternates, never a main line) falls
     back to the average overround of whichever other books in this pool
-    do have one; only if none do is that book's probability left raw."""
+    do have one; only if none do is that book's probability left raw.
+
+    A real trading market (Kalshi) doesn't post American odds at all — it
+    prices the Over probability directly as a dollar price, and its own
+    bid/ask spread already IS its margin, netted out by averaging the two
+    at ingestion time into `implied_probability` with `odds` left unset.
+    Those rows are used as-is here, and pool into the very same threshold
+    curve as sportsbook lines for the same stat, not a separate one."""
     vig_factors = _bookmaker_vig_factors(props)
     known_factors = list(vig_factors.values())
     pool_default_factor = sum(known_factors) / len(known_factors) if known_factors else 1.0
 
     by_threshold = {}
     for prop in props:
-        if prop.line is None or prop.odds is None:
+        if prop.line is None:
             continue
-        if prop.under_odds is not None:
+        if prop.odds is not None and prop.under_odds is not None:
             p = _devig_over_probability(prop.odds, prop.under_odds)
-        else:
+        elif prop.odds is not None:
             factor = vig_factors.get(prop.bookmaker, pool_default_factor)
             p = american_odds_to_implied_probability(prop.odds) / factor
+        elif prop.implied_probability is not None:
+            p = prop.implied_probability
+        else:
+            continue
         by_threshold.setdefault(prop.line, []).append(p)
     return {threshold: sum(ps) / len(ps) for threshold, ps in by_threshold.items()}
 

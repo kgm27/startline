@@ -22,6 +22,7 @@ from app.name_utils import normalize_name
 from app.config import get_settings
 from app.data_sources.sleeper import sync_players, fetch_current_week
 from app.data_sources.odds_api import sync_odds, DFS_SOURCE_LABELS
+from app.data_sources.kalshi import sync_kalshi
 from app.scoring.blend import (
     dfs_projection_points,
     betting_derived_points,
@@ -1080,12 +1081,16 @@ def player_detail(request: Request, player_id: str, week: int = None, format: st
             # anchor, which isn't from any real book)
             books_by_threshold = {}
             for prop in stat_props:
-                if prop.line is None or prop.odds is None:
+                if prop.line is None or (prop.odds is None and prop.implied_probability is None):
                     continue
                 books_by_threshold.setdefault(prop.line, []).append({
                     "bookmaker": prop.bookmaker or "unknown",
                     "odds": prop.odds,
                     "under_odds": prop.under_odds,
+                    # Only set for a source that prices probability directly
+                    # rather than through American odds (Kalshi) — lets the
+                    # per-book hover show its real price instead of "—".
+                    "implied_probability": prop.implied_probability if prop.odds is None else None,
                 })
             for book_list in books_by_threshold.values():
                 book_list.sort(key=lambda b: b["bookmaker"])
@@ -1388,6 +1393,7 @@ def refresh(db: Session = Depends(get_db), x_refresh_token: str = Header(None)):
     if not settings.refresh_secret or not secrets.compare_digest(x_refresh_token or "", settings.refresh_secret):
         raise HTTPException(status_code=401, detail="Missing or invalid X-Refresh-Token header")
     sync_players(db)
+    week = fetch_current_week()
 
     notes = []
     if settings.odds_api_key:
@@ -1401,7 +1407,6 @@ def refresh(db: Session = Depends(get_db), x_refresh_token: str = Header(None)):
             if result["unmatched"]:
                 notes.append(f"{len(result['unmatched'])} player name(s) didn't match our roster")
 
-            week = fetch_current_week()
             snapshot_count = capture_threshold_snapshots(db, week)
             notes.append(f"Captured {snapshot_count} threshold snapshot(s) for the historical % chance charts")
             prediction_count = capture_prediction_snapshots(db, week)
@@ -1415,6 +1420,22 @@ def refresh(db: Session = Depends(get_db), x_refresh_token: str = Header(None)):
             # page and in access logs. Log server-side only.
             logging.exception("Odds refresh failed")
             notes.append("Odds refresh failed, check server logs for details")
+
+    # Kalshi is public and free (no key, no per-call cost), so it isn't
+    # gated behind a settings check the way the paid Odds API is — it runs
+    # every refresh regardless.
+    try:
+        kalshi_result = sync_kalshi(week, db)
+        notes.append(
+            f"Kalshi: checked {kalshi_result['events_checked']} open event(s), "
+            f"stored {kalshi_result['props_stored']} contract price(s)"
+        )
+        if kalshi_result["unmatched"]:
+            notes.append(f"{len(kalshi_result['unmatched'])} Kalshi player name(s) didn't match our roster")
+        _PLAYER_ROWS_CACHE.clear()
+    except Exception:
+        logging.exception("Kalshi refresh failed")
+        notes.append("Kalshi refresh failed, check server logs for details")
 
     query = ""
     if notes:

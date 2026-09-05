@@ -22,21 +22,16 @@ import httpx
 
 from app.config import get_settings
 from app.db import SessionLocal
-from app.models import Player, OddsProp, DfsProjection
+from app.models import OddsProp, DfsProjection
 from app.data_sources.sleeper import fetch_current_week
-from app.name_utils import normalize_name
+from app.name_utils import find_player_by_name
 
 BASE_URL = "https://api.the-odds-api.com/v4"
 SPORT = "americanfootball_nfl"
 
-
-def _find_player(db, player_name: str):
-    """Match a player by name via the shared normalized form (see
-    app/name_utils.py), so a suffix, punctuation, or casing mismatch between
-    this API's naming and Sleeper's (e.g. "Kenneth Walker III" vs "Kenneth
-    Walker") doesn't silently drop that player from every source on the
-    site."""
-    return db.query(Player).filter(Player.normalized_name == normalize_name(player_name)).first()
+# Kept as a module-level alias (not just imported and used inline) so the
+# call sites below read the same as before this moved to name_utils.py.
+_find_player = find_player_by_name
 
 # Historical odds snapshots are for a fixed past moment, so they never
 # change — safe (and cheap) to cache on disk forever. Live endpoints are
