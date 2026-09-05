@@ -1173,6 +1173,22 @@ def player_detail(request: Request, player_id: str, week: int = None, format: st
     stats.sort(key=lambda m: MARKET_ORDER.index(m["key"]) if m["key"] in MARKET_ORDER else len(MARKET_ORDER))
     markets = stats
 
+    # A real, computed boom probability isn't the same as "has boom
+    # potential" — the dashboard's 🚀 badge only lights up for the top
+    # quartile of the player's position that week (see _player_rows), and
+    # this page should never disagree with that by calling out a number
+    # that didn't actually clear the bar. Reuses _player_rows() (cached,
+    # so this costs nothing extra) as the single source of truth for
+    # whether THIS player cleared it, rather than re-deriving the cutoff
+    # here. Only suppresses the real-number case — "not enough data to
+    # estimate at all" (probability is None) is a different, legitimate
+    # message and stays as-is.
+    if boom and boom.get("probability") is not None:
+        rows = _player_rows(db, week, scoring, scoring_format)
+        row = next((r for r in rows if r["id"] == player.id), None)
+        if not (row and row["boom_flag"]):
+            boom = None
+
     dfs_pts = dfs_projection_points(dfs_rows) if scoring_format == "half_ppr" else None
     betting_pts = betting_derived_points(props, scoring)
     blended = blend_expected_points(dfs_pts, betting_pts)
