@@ -682,7 +682,11 @@ def _mini_sparkline_svg(history, width=64, height=22):
 
 @app.get("/")
 def landing(request: Request):
-    return templates.TemplateResponse("landing.html", {"request": request, "active_page": "landing"})
+    return templates.TemplateResponse("landing.html", {
+        "request": request,
+        "active_page": "landing",
+        "narrow": True,
+    })
 
 
 _PLAYER_ROWS_CACHE = {}

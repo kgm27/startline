@@ -1,35 +1,46 @@
 {% extends "base.html" %}
 {% block title %}StartLine{% endblock %}
 {% block content %}
-<div class="page">
-    <section class="hero">
-        <h1 class="hero-title">One score, blended from <span class="mark">every angle</span>.</h1>
-        <p class="hero-subtitle">
-            DFS projections, sportsbook and prediction-market odds, and expert consensus rankings, blended
-            into a single expected-points number for every player, every week. No more juggling tabs to
-            make one lineup call.
-        </p>
-        <div class="hero-actions">
-            <a href="/dashboard" class="btn btn-primary">View the dashboard &rarr;</a>
-            <a href="/about" class="btn">How the blend works</a>
+<div class="page page-narrow">
+    <section class="hero-plain">
+        <h1 class="hero-title-plain">One score, blended from every angle.</h1>
+    </section>
+
+    <section class="hero-features center">
+        <div class="feature-card">
+            <svg class="feature-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="4" y1="21" x2="20" y2="21"/>
+                <rect x="6" y="13" width="3.4" height="8"/>
+                <rect x="10.3" y="8.5" width="3.4" height="12.5"/>
+                <rect x="14.6" y="3" width="3.4" height="18"/>
+            </svg>
+            <span class="feature-kicker">DFS Projections</span>
+            <p>Underdog, PrizePicks &amp; Betr Picks</p>
+        </div>
+        <div class="feature-card">
+            <svg class="feature-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="3" x2="12" y2="19"/>
+                <line x1="5" y1="7" x2="19" y2="7"/>
+                <path d="M5 7 L2.5 13 A2.5 2.5 0 0 0 7.5 13 Z"/>
+                <path d="M19 7 L16.5 13 A2.5 2.5 0 0 0 21.5 13 Z"/>
+                <line x1="8.5" y1="21" x2="15.5" y2="21"/>
+            </svg>
+            <span class="feature-kicker">Sportsbook &amp; Market Odds</span>
+            <p>Sportsbook lines &amp; Kalshi, de-vigged</p>
+        </div>
+        <div class="feature-card">
+            <svg class="feature-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="10" r="7"/>
+                <path d="M9 10 L11 12.3 L15.3 7.3"/>
+                <path d="M8.3 16.2 L6.5 21.5 L12 19 L17.5 21.5 L15.7 16.2"/>
+            </svg>
+            <span class="feature-kicker">Expert Consensus</span>
+            <p>FantasyPros ranks</p>
         </div>
     </section>
 
-    <h2 class="section-head">What goes in</h2>
-    <section class="hero-features">
-        <div class="feature-card">
-            <span class="feature-kicker">DFS projections</span>
-            <p>Underdog, PrizePicks, and Betr Picks, averaged into expected fantasy points.</p>
-        </div>
-        <div class="feature-card">
-            <span class="feature-kicker">Sportsbook &amp; market odds</span>
-            <p>Player-prop lines from US sportsbooks and real-money prediction markets (Kalshi), converted
-                into expected stat outcomes using the market's own implied probabilities.</p>
-        </div>
-        <div class="feature-card">
-            <span class="feature-kicker">Expert rankings</span>
-            <p>FantasyPros consensus rank, shown beside the numbers as a sanity check.</p>
-        </div>
-    </section>
+    <div class="hero-actions center">
+        <a href="/dashboard" class="btn btn-primary">View the dashboard &rarr;</a>
+    </div>
 </div>
 {% endblock %}
