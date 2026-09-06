@@ -21,6 +21,17 @@
         <div class="note-banner">{{ note }}</div>
         {% endif %}
 
+        {% if hidden_count %}
+        <div class="notice">
+            <p>{{ hidden_count }} player{{ "s" if hidden_count != 1 }} hidden this week: markets exist for them
+                but not every stat this position needs (e.g. a receiver with only a touchdown line, no
+                yards or receptions; a QB with no interception line yet). Shown numbers would understate risk
+                or usage that hasn't been priced yet, so they're left off the dashboard until they are.
+                Still searchable on <a href="/compare?week={{ week }}&format={{ scoring_format }}">Compare</a>
+                or <a href="/ask">Ask</a>.</p>
+        </div>
+        {% endif %}
+
         <section class="season">
             <div class="season-head">
                 <div class="season-now">Week {{ week }} <span class="of">of {{ total_weeks }}</span></div>

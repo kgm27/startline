@@ -36,6 +36,7 @@ from app.scoring.blend import (
     MIN_THRESHOLDS_FOR_CURVE,
     LINE_MARKET_CV,
     RECEPTIONS_FIRST_CATCH_ANCHOR,
+    has_complete_data,
     _pooled_survival_curve,
     _apply_stat_anchors,
     _discrete_tail_sum,
@@ -780,6 +781,7 @@ def _player_rows(db, week, scoring, scoring_format):
             "boom_stat": boom_stat,
             "boom_prob": boom_prob,
             "boom_points_upside": boom_points_upside,
+            "complete_data": has_complete_data(player.position, props),
         })
 
     # "High ceiling" flag: top quartile of boom_prob within each position,
@@ -825,7 +827,18 @@ def dashboard(request: Request, week: int = None, position: str = None, note: st
     # Position filtering/search/sort all happen client-side (see dashboard.html)
     # for a snappy no-reload experience, so this always loads every position:
     # `position` is only used to seed which pill starts active.
-    rows = _player_rows(db, week, scoring, scoring_format)
+    all_rows = _player_rows(db, week, scoring, scoring_format)
+
+    # The Dashboard only shows players with a complete-enough picture (see
+    # has_complete_data) - a receiver with just an anytime-TD line and no
+    # yardage/receptions market, or a QB with no interception line, isn't
+    # "a low-usage player," it's a market that hasn't posted everything yet,
+    # and showing it as a normal row understates the real number with no
+    # visible sign why. This filter is display-only: Compare and Ask both
+    # read the unfiltered _player_rows() output directly, so a hidden
+    # player is still fully findable there, real numbers and all.
+    rows = [r for r in all_rows if r["complete_data"]]
+    hidden_count = len(all_rows) - len(rows)
 
     # Tiny inline Blended-score trend sparkline per row (Phase 3B.4). One
     # bulk query for the whole week rather than one per player/row.
@@ -856,6 +869,7 @@ def dashboard(request: Request, week: int = None, position: str = None, note: st
         "initial_position_json": _script_safe_json(position.upper() if position else "All"),
         "scoring_format_json": _script_safe_json(scoring_format),
         "summary": summary,
+        "hidden_count": hidden_count,
         "week": week,
         "position": position,
         "scoring_format": scoring_format,

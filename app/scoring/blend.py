@@ -55,6 +55,36 @@ STAT_TO_RULE = {
 DISCRETE_COUNT_STATS = {"receptions", "pass_tds", "interceptions", "rush_rec_tds"}
 NO_FALLBACK_STATS = {"rush_rec_tds"}
 
+# The stats a position's Sportsbook Projection needs SOME real market data
+# for before a player counts as having a complete picture — not every stat
+# that COULD exist for the position, just the ones whose absence quietly
+# understates the number rather than reflecting a real absence of usage.
+# A receiver with only an anytime-TD line and no yardage/receptions market
+# isn't "a low-usage receiver" — that's the touchdown market alone standing
+# in for the whole Sportsbook Projection, same failure shape as the
+# missing-interceptions gap on QBs. Rushing production for a QB and
+# receiving work for an RB are real, legitimate zeros for plenty of players
+# (a pocket passer, a between-the-tackles back), so those stay optional
+# here rather than required.
+REQUIRED_STATS_BY_POSITION = {
+    "QB": {"pass_yds", "pass_tds", "interceptions"},
+    "RB": {"rush_yds"},
+    "WR": {"reception_yds", "receptions"},
+    "TE": {"reception_yds", "receptions"},
+}
+
+
+def has_complete_data(position: str, props: list[OddsProp]) -> bool:
+    """Whether every stat this position needs has at least one real prop
+    (any bookmaker, any threshold) — not whether the curve is rich enough
+    to trust, just whether the market exists at all. A position with no
+    entry in REQUIRED_STATS_BY_POSITION is never held back by this check."""
+    required = REQUIRED_STATS_BY_POSITION.get(position)
+    if not required:
+        return True
+    stats_present = {MARKET_TO_STAT[p.market] for p in props if p.market in MARKET_TO_STAT}
+    return required.issubset(stats_present)
+
 # Below this many distinct thresholds pooled across books, there isn't
 # enough shape information to trust a numerical curve — fall back to the
 # single (main) line, nudged by that book's own price skew. Rough, NOT
