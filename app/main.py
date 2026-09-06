@@ -1464,6 +1464,7 @@ def refresh(skip_odds: bool = False, db: Session = Depends(get_db), x_refresh_to
             fp_stored = 0
             fp_unmatched = set()
             fp_rate_limited = []
+            fp_errors = []
             # Rankings differ by scoring format, and the site supports more
             # than half_ppr elsewhere, so pull all three rather than only
             # the default — FantasyPros is a flat monthly fee, not
@@ -1479,11 +1480,21 @@ def refresh(skip_odds: bool = False, db: Session = Depends(get_db), x_refresh_to
                 fp_rate_limited.extend(
                     f"{pos}/{scoring_format}" for pos in fp_result["rate_limited_positions"]
                 )
+                fp_errors.extend(
+                    f"{pos}/{scoring_format}: {summary}" for pos, summary in fp_result["errors"]
+                )
             notes.append(f"FantasyPros: stored {fp_stored} expert rank(s) across all scoring formats")
             if fp_unmatched:
                 notes.append(f"{len(fp_unmatched)} FantasyPros player name(s) didn't match our roster")
             if fp_rate_limited:
                 notes.append(f"Still rate-limited, skipped: {', '.join(fp_rate_limited)}")
+            if fp_errors:
+                # No server-log access to check otherwise, so the actual
+                # status code/body goes straight into the note itself
+                # (see _short_error_summary - never the key, it travels as
+                # a header not a URL param, and never the full raw
+                # exception, same rule the Odds API side follows).
+                notes.append(f"FantasyPros errors: {'; '.join(fp_errors)}")
             _PLAYER_ROWS_CACHE.clear()
         except Exception:
             logging.exception("FantasyPros refresh failed")

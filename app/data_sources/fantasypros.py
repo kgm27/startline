@@ -100,6 +100,19 @@ def _fetch_paced(year: int, week: int, position: str, scoring_format: str) -> di
             raise
 
 
+def _short_error_summary(exc: Exception) -> str:
+    """A safe-to-display-publicly summary of a fetch failure: the status
+    code and a short, JSON-error-shaped snippet of the body where there is
+    one, never the API key (the key travels as a header, never the URL,
+    so httpx's own exception text doesn't carry it either) and never the
+    full raw exception (this note is shown on the public dashboard URL,
+    same rule the Odds API side already follows)."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        snippet = exc.response.text[:120].replace("\n", " ").strip()
+        return f"HTTP {exc.response.status_code}" + (f" - {snippet}" if snippet else "")
+    return type(exc).__name__
+
+
 def _parse_position_rank(pos_rank: str):
     """"RB1" -> 1. Returns None if the field is missing or unparseable
     (e.g. an unranked player) rather than raising."""
@@ -141,6 +154,7 @@ def sync_fantasypros(year: int, week: int, scoring_format: str, db: SessionLocal
         stored = 0
         unmatched = set()
         rate_limited_positions = []
+        errors = []  # [(position, short safe-to-display error summary), ...]
 
         for position in POSITIONS:
             try:
@@ -150,6 +164,14 @@ def sync_fantasypros(year: int, week: int, scoring_format: str, db: SessionLocal
                 # position rather than losing whatever earlier positions
                 # in this same call already succeeded.
                 rate_limited_positions.append(position)
+                continue
+            except Exception as exc:
+                # Anything else (a non-429 HTTP error, a network blip) -
+                # same reasoning: one position's failure shouldn't lose the
+                # others, and recording *what* failed beats a generic
+                # "FantasyPros refresh failed, check server logs" note when
+                # there's no server-log access to actually check.
+                errors.append((position, _short_error_summary(exc)))
                 continue
             for player in data.get("players", []):
                 position_rank = _parse_position_rank(player.get("pos_rank"))
@@ -168,6 +190,7 @@ def sync_fantasypros(year: int, week: int, scoring_format: str, db: SessionLocal
             "players_stored": stored,
             "unmatched": sorted(unmatched),
             "rate_limited_positions": rate_limited_positions,
+            "errors": errors,
         }
     finally:
         if owns_session:
