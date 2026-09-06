@@ -152,10 +152,27 @@ The plan has two parts:
       matter what week is requested (tested week 15 and week 3, both 2025 and 2026, all returned the same Week 1
       data). Full weekly archives need the paid MVP/HOF membership already flagged in the brief (~$6-13/mo).
       Owner is upgrading later today; 3.3-3.5 are paused until then.
-- [ ] **3.3** Un-hide / populate the expert column on the Dashboard and Player detail pages (the code already
-      degrades gracefully; this switches it on).
-- [ ] **3.4** Decide how expert rankings appear on the new Comparison page.
-- [ ] **3.5** Verify real expert data flows through end-to-end.
+      **2026-09-05 finding:** the "free tier" diagnosis was only half the story. `fetch_consensus_rankings()`
+      itself had never actually been called against a real key when it was written — its URL put `week` as a
+      path segment with no year at all (`.../nfl/{week}/consensus-rankings`), which is not the real shape.
+      That's what was actually producing the same stale data regardless of requested week, tier aside. Fixed to
+      the verified real shape (`.../nfl/{year}/consensus-rankings?week=...`), confirmed against the now-upgraded
+      premium key with three different (year, week) combinations: current week (2026 wk1, real/live), a future
+      week with nothing published yet (2026 wk3, correctly empty), and real historical data (2025 wk15,
+      `last_updated: 12/14`, Christian McCaffrey #1 RB — matching this project's own backtest).
+- [x] **3.3** Un-hide / populate the expert column on the Dashboard and Player detail pages. Done: new
+      `sync_fantasypros()` in `app/data_sources/fantasypros.py`, matches players by name via the same shared
+      `name_utils.find_player_by_name()` every other source uses, wired into `/refresh` (pulls all three scoring
+      formats each run — FantasyPros is a flat monthly fee, not metered per call, so there's no cost reason to
+      hold back the way there is for the Odds API). No UI change needed: the column already degraded gracefully
+      to "—" with no data; it just started showing real labels the moment real `ExpertRank` rows existed.
+- [x] **3.4** Decide how expert rankings appear on the new Comparison page. Settled: no new UI needed here
+      either — Compare already reused `_player_rows()`, which now carries real expert labels, so it started
+      working automatically.
+- [x] **3.5** Verify real expert data flows through end-to-end. Done: confirmed live on Dashboard ("Top 12 at
+      position" / "Flex-worthy" / "Bench"), Player detail, and Compare, all from the same real pull (654 of ~700
+      FantasyPros-ranked skill players matched; the ~25 unmatched are mostly fullbacks, a position this site
+      doesn't track at all, plus a handful of free agents not in the active roster sync).
 
 ## Phase 3B — Prediction-trend feature (new)
 

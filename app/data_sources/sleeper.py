@@ -25,6 +25,16 @@ def fetch_current_week() -> int:
     return response.json().get("week") or 1
 
 
+def fetch_current_season() -> int:
+    """Current NFL season year per Sleeper (e.g. FantasyPros' consensus-
+    rankings endpoint is keyed by year, not just week). Falls back to this
+    calendar year if the field is missing."""
+    response = httpx.get(SLEEPER_STATE_URL, timeout=15)
+    response.raise_for_status()
+    season = response.json().get("season")
+    return int(season) if season else datetime.now(timezone.utc).year
+
+
 def fetch_players() -> dict:
     """Returns Sleeper's raw {player_id: player_data} dict."""
     response = httpx.get(SLEEPER_PLAYERS_URL, timeout=30)

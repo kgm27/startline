@@ -31,6 +31,14 @@
     </div>
     {% endif %}
 
+    {% if missing_interceptions %}
+    <div class="note-banner">
+        No interception market has been posted for this game yet. The Sportsbook Projection below doesn't
+        include any interception risk for {{ player.name }} until one is, so treat it as a bit optimistic
+        until this line shows up.
+    </div>
+    {% endif %}
+
     <section class="summary-box">
         <div>
             <span class="summary-label">DFS Projection</span>

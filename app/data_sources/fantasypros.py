@@ -1,13 +1,29 @@
 """FantasyPros Expert Consensus Rankings (ECR) API client
 (fantasypros.com/api-data — api.fantasypros.com).
 
-NOT YET TESTED against a real key — written from documented endpoint shape.
-Verify against the live docs once FANTASYPROS_API_KEY is set, then this
-comment can be removed.
-"""
+Verified 2026-09-05 against a real premium-tier key: the endpoint shape
+this file previously used was wrong (week as a PATH segment, e.g.
+".../nfl/15/consensus-rankings", with no year at all). That silently
+returned the same stale preseason data no matter what week was
+requested — which looked at the time like a free-tier limitation (the
+response even carried "tier": "free"), but was actually just an invalid
+path. Confirmed by testing three different (year, week) combinations on
+the now-upgraded premium key: the real shape is
+".../nfl/{year}/consensus-rankings" with week as a query param, and it
+correctly returns real, distinct data for the current week (2026 week
+1), an empty result for a future week with no rankings published yet
+(2026 week 3), and real historical data for a past week (2025 week 15,
+last_updated "12/14", Christian McCaffrey #1 RB — matching this
+project's own Week 15 2025 backtest)."""
+import re
+from datetime import datetime, timezone
+
 import httpx
 
 from app.config import get_settings
+from app.db import SessionLocal
+from app.models import ExpertRank
+from app.name_utils import find_player_by_name
 
 BASE_URL = "https://api.fantasypros.com/public/v2/json/nfl"
 
@@ -17,6 +33,10 @@ SCORING_FORMAT_CODES = {
     "half_ppr": "HALF",
     "full_ppr": "PPR",
 }
+
+POSITIONS = ("QB", "RB", "WR", "TE")
+
+_POS_RANK_NUMBER_RE = re.compile(r"\d+")
 
 
 class FantasyProsNotConfigured(Exception):
@@ -32,15 +52,77 @@ def _require_key() -> str:
     return key
 
 
-def fetch_consensus_rankings(week: int, position: str, scoring_format: str = "half_ppr") -> dict:
-    """Weekly expert consensus rank/tier for one position (QB/RB/WR/TE)."""
+def fetch_consensus_rankings(year: int, week: int, position: str, scoring_format: str = "half_ppr") -> dict:
+    """Weekly expert consensus rank for one position (QB/RB/WR/TE)."""
     key = _require_key()
     scoring_code = SCORING_FORMAT_CODES.get(scoring_format, "HALF")
     resp = httpx.get(
-        f"{BASE_URL}/{week}/consensus-rankings",
-        params={"position": position, "scoring": scoring_code, "type": "weekly"},
+        f"{BASE_URL}/{year}/consensus-rankings",
+        params={"position": position, "scoring": scoring_code, "type": "weekly", "week": week},
         headers={"x-api-key": key},
         timeout=30,
     )
     resp.raise_for_status()
     return resp.json()
+
+
+def _parse_position_rank(pos_rank: str):
+    """"RB1" -> 1. Returns None if the field is missing or unparseable
+    (e.g. an unranked player) rather than raising."""
+    if not pos_rank:
+        return None
+    match = _POS_RANK_NUMBER_RE.search(pos_rank)
+    return int(match.group()) if match else None
+
+
+def _upsert_expert_rank(db, player_id, week, position_rank, scoring_format, now):
+    existing = (
+        db.query(ExpertRank)
+        .filter_by(player_id=player_id, week=week, scoring_format=scoring_format)
+        .first()
+    )
+    if existing:
+        existing.position_rank = position_rank
+        existing.updated_at = now
+    else:
+        db.add(ExpertRank(
+            player_id=player_id,
+            week=week,
+            position_rank=position_rank,
+            tier=None,  # not exposed by this API response shape
+            scoring_format=scoring_format,
+            updated_at=now,
+        ))
+
+
+def sync_fantasypros(year: int, week: int, scoring_format: str, db: SessionLocal = None) -> dict:
+    """Pulls consensus rankings for every skill position and stores them.
+    Free reads are not the concern here (unlike the Odds API) — this is a
+    metered-by-plan API the owner already pays a flat monthly fee for, not
+    a per-call cost, so there's no credit budget to protect."""
+    owns_session = db is None
+    db = db or SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+        stored = 0
+        unmatched = set()
+
+        for position in POSITIONS:
+            data = fetch_consensus_rankings(year, week, position, scoring_format)
+            for player in data.get("players", []):
+                position_rank = _parse_position_rank(player.get("pos_rank"))
+                if position_rank is None:
+                    continue
+                name = player.get("player_name")
+                matched = find_player_by_name(db, name)
+                if not matched:
+                    unmatched.add(name)
+                    continue
+                _upsert_expert_rank(db, matched.id, week, position_rank, scoring_format, now)
+                stored += 1
+
+        db.commit()
+        return {"players_stored": stored, "unmatched": sorted(unmatched)}
+    finally:
+        if owns_session:
+            db.close()

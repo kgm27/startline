@@ -20,9 +20,10 @@ from app.db import Base, engine, get_db, SessionLocal
 from app.models import Player, DfsProjection, OddsProp, ExpertRank, ThresholdSnapshot, PredictionSnapshot
 from app.name_utils import normalize_name
 from app.config import get_settings
-from app.data_sources.sleeper import sync_players, fetch_current_week
+from app.data_sources.sleeper import sync_players, fetch_current_week, fetch_current_season
 from app.data_sources.odds_api import sync_odds, DFS_SOURCE_LABELS
 from app.data_sources.kalshi import sync_kalshi
+from app.data_sources.fantasypros import sync_fantasypros
 from app.scoring.blend import (
     dfs_projection_points,
     betting_derived_points,
@@ -1046,6 +1047,15 @@ def player_detail(request: Request, player_id: str, week: int = None, format: st
             continue
         props_by_stat.setdefault(stat, []).append(prop)
 
+    # Interception props are one of the later/thinner sportsbook markets to
+    # get posted (same pattern seen elsewhere this early in a week), so a
+    # QB missing one doesn't mean "no risk" - betting_derived_points() just
+    # sums whichever stats have data and silently skips ones that don't,
+    # which would otherwise make this number look better than it really is
+    # with no visible sign why. Only QBs throw interceptions, so this only
+    # applies there.
+    missing_interceptions = player.position == "QB" and "interceptions" not in props_by_stat
+
     # Boom potential (Phase 3C): computed inline in this same loop, reusing
     # the curve/expected_count already built for the player's main stat
     # rather than pooling the props a second time.
@@ -1275,6 +1285,7 @@ def player_detail(request: Request, player_id: str, week: int = None, format: st
         ),
         "injury_code": INJURY_CODES.get(player.injury_status, player.injury_status),
         "is_demo_week": is_demo_week,
+        "missing_interceptions": missing_interceptions,
         "scoring_format": scoring_format,
         "scoring_format_label": SCORING_FORMAT_LABELS[scoring_format],
     })
@@ -1391,8 +1402,7 @@ def refresh(db: Session = Depends(get_db), x_refresh_token: str = Header(None)):
     a matching X-Refresh-Token header (see REFRESH_SECRET in .env) so a
     stranger who finds this URL can't spend real Odds API credits. Fails
     closed: if REFRESH_SECRET isn't configured at all, every request is
-    rejected rather than silently allowed through.
-    FantasyPros pulls get wired in here once a key is added."""
+    rejected rather than silently allowed through."""
     settings = get_settings()
     if not settings.refresh_secret or not secrets.compare_digest(x_refresh_token or "", settings.refresh_secret):
         raise HTTPException(status_code=401, detail="Missing or invalid X-Refresh-Token header")
@@ -1440,6 +1450,27 @@ def refresh(db: Session = Depends(get_db), x_refresh_token: str = Header(None)):
     except Exception:
         logging.exception("Kalshi refresh failed")
         notes.append("Kalshi refresh failed, check server logs for details")
+
+    if settings.fantasypros_api_key:
+        try:
+            season = fetch_current_season()
+            fp_stored = 0
+            fp_unmatched = set()
+            # Rankings differ by scoring format, and the site supports more
+            # than half_ppr elsewhere, so pull all three rather than only
+            # the default — FantasyPros is a flat monthly fee, not
+            # metered per call, so there's no cost reason to hold back.
+            for scoring_format in SCORING_RULES:
+                fp_result = sync_fantasypros(season, week, scoring_format, db)
+                fp_stored += fp_result["players_stored"]
+                fp_unmatched.update(fp_result["unmatched"])
+            notes.append(f"FantasyPros: stored {fp_stored} expert rank(s) across all scoring formats")
+            if fp_unmatched:
+                notes.append(f"{len(fp_unmatched)} FantasyPros player name(s) didn't match our roster")
+            _PLAYER_ROWS_CACHE.clear()
+        except Exception:
+            logging.exception("FantasyPros refresh failed")
+            notes.append("FantasyPros refresh failed, check server logs for details")
 
     query = ""
     if notes:
