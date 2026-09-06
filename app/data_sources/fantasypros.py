@@ -16,6 +16,7 @@ correctly returns real, distinct data for the current week (2026 week
 last_updated "12/14", Christian McCaffrey #1 RB — matching this
 project's own Week 15 2025 backtest)."""
 import re
+import time
 from datetime import datetime, timezone
 
 import httpx
@@ -36,7 +37,22 @@ SCORING_FORMAT_CODES = {
 
 POSITIONS = ("QB", "RB", "WR", "TE")
 
+# Confirmed 2026-09-05: pulling all 3 scoring formats back-to-back (12
+# calls total - 4 positions x 3 formats, one refresh) started returning
+# 429 Too Many Requests partway through, after the first several calls
+# succeeded. A fixed pause before every call keeps this well clear of
+# whatever that limit actually is; a raised RateLimited on a call that's
+# still throttled after one retry lets the caller decide whether to give
+# up on the remaining positions/formats for this refresh rather than
+# losing everything already fetched (each scoring format's rows are
+# committed as their own unit, not all three at once).
+MIN_CALL_INTERVAL_SECONDS = 2.0
+
 _POS_RANK_NUMBER_RE = re.compile(r"\d+")
+
+
+class RateLimited(Exception):
+    pass
 
 
 class FantasyProsNotConfigured(Exception):
@@ -64,6 +80,24 @@ def fetch_consensus_rankings(year: int, week: int, position: str, scoring_format
     )
     resp.raise_for_status()
     return resp.json()
+
+
+def _fetch_paced(year: int, week: int, position: str, scoring_format: str) -> dict:
+    """fetch_consensus_rankings(), paced to stay clear of the rate limit
+    and given one retry (with a longer pause) if it's still tripped."""
+    time.sleep(MIN_CALL_INTERVAL_SECONDS)
+    try:
+        return fetch_consensus_rankings(year, week, position, scoring_format)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code != 429:
+            raise
+        time.sleep(10)
+        try:
+            return fetch_consensus_rankings(year, week, position, scoring_format)
+        except httpx.HTTPStatusError as exc2:
+            if exc2.response.status_code == 429:
+                raise RateLimited(f"Still rate-limited fetching {position}/{scoring_format} after one retry") from exc2
+            raise
 
 
 def _parse_position_rank(pos_rank: str):
@@ -106,9 +140,17 @@ def sync_fantasypros(year: int, week: int, scoring_format: str, db: SessionLocal
         now = datetime.now(timezone.utc)
         stored = 0
         unmatched = set()
+        rate_limited_positions = []
 
         for position in POSITIONS:
-            data = fetch_consensus_rankings(year, week, position, scoring_format)
+            try:
+                data = _fetch_paced(year, week, position, scoring_format)
+            except RateLimited:
+                # Still rate-limited after a retry: skip just this one
+                # position rather than losing whatever earlier positions
+                # in this same call already succeeded.
+                rate_limited_positions.append(position)
+                continue
             for player in data.get("players", []):
                 position_rank = _parse_position_rank(player.get("pos_rank"))
                 if position_rank is None:
@@ -122,7 +164,11 @@ def sync_fantasypros(year: int, week: int, scoring_format: str, db: SessionLocal
                 stored += 1
 
         db.commit()
-        return {"players_stored": stored, "unmatched": sorted(unmatched)}
+        return {
+            "players_stored": stored,
+            "unmatched": sorted(unmatched),
+            "rate_limited_positions": rate_limited_positions,
+        }
     finally:
         if owns_session:
             db.close()

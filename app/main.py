@@ -1397,12 +1397,17 @@ def capture_prediction_snapshots(db: Session, week: int) -> int:
 
 
 @app.post("/refresh")
-def refresh(db: Session = Depends(get_db), x_refresh_token: str = Header(None)):
+def refresh(skip_odds: bool = False, db: Session = Depends(get_db), x_refresh_token: str = Header(None)):
     """Pulls fresh data from every source that's currently set up. Requires
     a matching X-Refresh-Token header (see REFRESH_SECRET in .env) so a
     stranger who finds this URL can't spend real Odds API credits. Fails
     closed: if REFRESH_SECRET isn't configured at all, every request is
-    rejected rather than silently allowed through."""
+    rejected rather than silently allowed through.
+
+    `?skip_odds=true` runs everything except the Odds API pull - useful
+    for retrying Kalshi or FantasyPros on their own (both free/flat-fee)
+    without re-spending Odds API credits on sportsbook lines that are
+    still fresh from an earlier call this same session."""
     settings = get_settings()
     if not settings.refresh_secret or not secrets.compare_digest(x_refresh_token or "", settings.refresh_secret):
         raise HTTPException(status_code=401, detail="Missing or invalid X-Refresh-Token header")
@@ -1410,7 +1415,9 @@ def refresh(db: Session = Depends(get_db), x_refresh_token: str = Header(None)):
     week = fetch_current_week()
 
     notes = []
-    if settings.odds_api_key:
+    if skip_odds:
+        notes.append("Odds: skipped (?skip_odds=true)")
+    if settings.odds_api_key and not skip_odds:
         try:
             result = sync_odds(db)
             notes.append(
@@ -1456,17 +1463,27 @@ def refresh(db: Session = Depends(get_db), x_refresh_token: str = Header(None)):
             season = fetch_current_season()
             fp_stored = 0
             fp_unmatched = set()
+            fp_rate_limited = []
             # Rankings differ by scoring format, and the site supports more
             # than half_ppr elsewhere, so pull all three rather than only
             # the default — FantasyPros is a flat monthly fee, not
             # metered per call, so there's no cost reason to hold back.
+            # Each call is paced against FantasyPros' own rate limit
+            # (confirmed 2026-09-05: 12 calls back-to-back started
+            # returning 429 partway through), so this loop runs slower
+            # than the other sources on purpose.
             for scoring_format in SCORING_RULES:
                 fp_result = sync_fantasypros(season, week, scoring_format, db)
                 fp_stored += fp_result["players_stored"]
                 fp_unmatched.update(fp_result["unmatched"])
+                fp_rate_limited.extend(
+                    f"{pos}/{scoring_format}" for pos in fp_result["rate_limited_positions"]
+                )
             notes.append(f"FantasyPros: stored {fp_stored} expert rank(s) across all scoring formats")
             if fp_unmatched:
                 notes.append(f"{len(fp_unmatched)} FantasyPros player name(s) didn't match our roster")
+            if fp_rate_limited:
+                notes.append(f"Still rate-limited, skipped: {', '.join(fp_rate_limited)}")
             _PLAYER_ROWS_CACHE.clear()
         except Exception:
             logging.exception("FantasyPros refresh failed")

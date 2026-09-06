@@ -131,7 +131,16 @@ def sync_kalshi(week: int, db: SessionLocal = None) -> dict:
                 continue  # a bad response for one series shouldn't sink the whole refresh
             for event in events:
                 events_checked += 1
-                markets = fetch_event_markets(event["event_ticker"])
+                try:
+                    markets = fetch_event_markets(event["event_ticker"])
+                except httpx.HTTPError:
+                    # One flaky event (of what can be 80+ sequential calls
+                    # in a single refresh) shouldn't lose everything already
+                    # fetched — confirmed 2026-09-05 this was a real gap:
+                    # an unhandled failure here raised all the way out and
+                    # rolled back the whole sync, since it only committed
+                    # once at the very end.
+                    continue
                 for market in markets:
                     if market.get("primary_participant_key") != "football_player":
                         continue  # a team- or game-level market slipped into this series
@@ -151,7 +160,12 @@ def sync_kalshi(week: int, db: SessionLocal = None) -> dict:
                     _upsert_kalshi_prop(db, player.id, week, market_key, line, probability, now)
                     stored += 1
 
-        db.commit()
+            # Commit after each series rather than only once at the very
+            # end, so a failure partway through (e.g. the next series'
+            # event-list call raising) still keeps whatever already
+            # succeeded instead of rolling it all back.
+            db.commit()
+
         return {"events_checked": events_checked, "props_stored": stored, "unmatched": sorted(unmatched)}
     finally:
         if owns_session:
