@@ -1473,6 +1473,7 @@ def refresh(skip_odds: bool = False, db: Session = Depends(get_db), x_refresh_to
             # (confirmed 2026-09-05: 12 calls back-to-back started
             # returning 429 partway through), so this loop runs slower
             # than the other sources on purpose.
+            fp_budget_exceeded = False
             for scoring_format in SCORING_RULES:
                 fp_result = sync_fantasypros(season, week, scoring_format, db)
                 fp_stored += fp_result["players_stored"]
@@ -1483,11 +1484,19 @@ def refresh(skip_odds: bool = False, db: Session = Depends(get_db), x_refresh_to
                 fp_errors.extend(
                     f"{pos}/{scoring_format}: {summary}" for pos, summary in fp_result["errors"]
                 )
+                if fp_result["budget_exceeded"]:
+                    # The remaining scoring formats would hit the exact
+                    # same daily cap - stop here rather than burning
+                    # through the whole loop just to confirm that again.
+                    fp_budget_exceeded = True
+                    break
             notes.append(f"FantasyPros: stored {fp_stored} expert rank(s) across all scoring formats")
             if fp_unmatched:
                 notes.append(f"{len(fp_unmatched)} FantasyPros player name(s) didn't match our roster")
             if fp_rate_limited:
                 notes.append(f"Still rate-limited, skipped: {', '.join(fp_rate_limited)}")
+            if fp_budget_exceeded:
+                notes.append("FantasyPros daily call budget reached, stopped early - try again tomorrow")
             if fp_errors:
                 # No server-log access to check otherwise, so the actual
                 # status code/body goes straight into the note itself

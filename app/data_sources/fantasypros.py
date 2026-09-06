@@ -15,9 +15,11 @@ correctly returns real, distinct data for the current week (2026 week
 (2026 week 3), and real historical data for a past week (2025 week 15,
 last_updated "12/14", Christian McCaffrey #1 RB — matching this
 project's own Week 15 2025 backtest)."""
+import json
 import re
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 
@@ -27,6 +29,21 @@ from app.models import ExpertRank
 from app.name_utils import find_player_by_name
 
 BASE_URL = "https://api.fantasypros.com/public/v2/json/nfl"
+
+# Confirmed with FantasyPros support 2026-09-06: the premium plan is capped
+# at 500 requests/day (and 1/second - see MIN_CALL_INTERVAL_SECONDS below).
+# A day of debugging this exact rate limit - diagnostics, reproductions,
+# local verification runs, several production attempts - burned well past
+# what a normal refresh needs before that limit was even confirmed, which
+# is what this guard exists to prevent from happening again. Tracked on
+# disk (not just in memory) specifically so a fresh `python3 -c ...` test
+# script - a new process, starting from zero - can't blow through this the
+# same way: every caller on this machine, local debugging included, shares
+# the same count. It can't coordinate with a separate deploy (Render and a
+# laptop don't share a disk), so this protects each environment against
+# itself, not both at once.
+DAILY_CALL_BUDGET = 450  # the real cap is 500; this leaves headroom for a manual check
+_CALL_LOG_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "_cache" / "fantasypros_call_log.json"
 
 # FantasyPros scoring-format codes
 SCORING_FORMAT_CODES = {
@@ -55,8 +72,37 @@ class RateLimited(Exception):
     pass
 
 
+class DailyBudgetExceeded(Exception):
+    pass
+
+
 class FantasyProsNotConfigured(Exception):
     pass
+
+
+def _load_call_log() -> tuple[str, int]:
+    """(date, calls made that day). Only today's count is ever kept - a
+    stale date's count is simply discarded, same one-key pattern main.py's
+    _ASK_SPEND already uses for the Ask feature's own daily budget."""
+    if not _CALL_LOG_PATH.exists():
+        return "", 0
+    try:
+        data = json.loads(_CALL_LOG_PATH.read_text())
+        return data.get("date", ""), data.get("count", 0)
+    except (json.JSONDecodeError, OSError):
+        return "", 0
+
+
+def _record_call() -> int:
+    """Increments (and persists) today's call count. Returns the new
+    total. Called BEFORE every real request, not after, so a call that's
+    about to blow the budget is refused instead of just counted."""
+    today = datetime.now(timezone.utc).date().isoformat()
+    logged_date, count = _load_call_log()
+    count = count + 1 if logged_date == today else 1
+    _CALL_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _CALL_LOG_PATH.write_text(json.dumps({"date": today, "count": count}))
+    return count
 
 
 def _require_key() -> str:
@@ -82,18 +128,32 @@ def fetch_consensus_rankings(year: int, week: int, position: str, scoring_format
     return resp.json()
 
 
+def _budget_checked_call(year: int, week: int, position: str, scoring_format: str) -> dict:
+    """The one place that actually spends a call against the daily budget -
+    both the first attempt and the post-429 retry go through this, so
+    neither one is invisible to the counter."""
+    calls_today = _record_call()
+    if calls_today > DAILY_CALL_BUDGET:
+        raise DailyBudgetExceeded(
+            f"{calls_today} FantasyPros calls already made today (budget {DAILY_CALL_BUDGET}, "
+            f"real plan cap 500) - refusing to make more."
+        )
+    return fetch_consensus_rankings(year, week, position, scoring_format)
+
+
 def _fetch_paced(year: int, week: int, position: str, scoring_format: str) -> dict:
-    """fetch_consensus_rankings(), paced to stay clear of the rate limit
-    and given one retry (with a longer pause) if it's still tripped."""
+    """fetch_consensus_rankings(), paced to stay clear of the rate limit,
+    budget-checked to stay clear of the daily cap, and given one retry
+    (with a longer pause) if it's still tripped."""
     time.sleep(MIN_CALL_INTERVAL_SECONDS)
     try:
-        return fetch_consensus_rankings(year, week, position, scoring_format)
+        return _budget_checked_call(year, week, position, scoring_format)
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code != 429:
             raise
         time.sleep(10)
         try:
-            return fetch_consensus_rankings(year, week, position, scoring_format)
+            return _budget_checked_call(year, week, position, scoring_format)
         except httpx.HTTPStatusError as exc2:
             if exc2.response.status_code == 429:
                 raise RateLimited(f"Still rate-limited fetching {position}/{scoring_format} after one retry") from exc2
@@ -144,9 +204,10 @@ def _upsert_expert_rank(db, player_id, week, position_rank, scoring_format, now)
 
 def sync_fantasypros(year: int, week: int, scoring_format: str, db: SessionLocal = None) -> dict:
     """Pulls consensus rankings for every skill position and stores them.
-    Free reads are not the concern here (unlike the Odds API) — this is a
-    metered-by-plan API the owner already pays a flat monthly fee for, not
-    a per-call cost, so there's no credit budget to protect."""
+    There's no per-call dollar cost to protect here (unlike the Odds API)
+    - it's a flat monthly fee - but there IS a real 500 calls/day cap on
+    the plan (see DAILY_CALL_BUDGET), which a day of debugging this exact
+    limit blew straight through before it was even confirmed."""
     owns_session = db is None
     db = db or SessionLocal()
     try:
@@ -156,6 +217,7 @@ def sync_fantasypros(year: int, week: int, scoring_format: str, db: SessionLocal
         rate_limited_positions = []
         errors = []  # [(position, short safe-to-display error summary), ...]
 
+        budget_exceeded = False
         for position in POSITIONS:
             try:
                 data = _fetch_paced(year, week, position, scoring_format)
@@ -165,6 +227,12 @@ def sync_fantasypros(year: int, week: int, scoring_format: str, db: SessionLocal
                 # in this same call already succeeded.
                 rate_limited_positions.append(position)
                 continue
+            except DailyBudgetExceeded:
+                # Every remaining position/format this run would hit the
+                # same wall - stop entirely rather than recording the same
+                # failure once per remaining position.
+                budget_exceeded = True
+                break
             except Exception as exc:
                 # Anything else (a non-429 HTTP error, a network blip) -
                 # same reasoning: one position's failure shouldn't lose the
@@ -191,6 +259,7 @@ def sync_fantasypros(year: int, week: int, scoring_format: str, db: SessionLocal
             "unmatched": sorted(unmatched),
             "rate_limited_positions": rate_limited_positions,
             "errors": errors,
+            "budget_exceeded": budget_exceeded,
         }
     finally:
         if owns_session:
