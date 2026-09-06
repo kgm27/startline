@@ -62,15 +62,21 @@ NO_FALLBACK_STATS = {"rush_rec_tds"}
 # A receiver with only an anytime-TD line and no yardage/receptions market
 # isn't "a low-usage receiver" — that's the touchdown market alone standing
 # in for the whole Sportsbook Projection, same failure shape as the
-# missing-interceptions gap on QBs. Rushing production for a QB and
-# receiving work for an RB are real, legitimate zeros for plenty of players
-# (a pocket passer, a between-the-tackles back), so those stay optional
-# here rather than required.
+# missing-interceptions gap on QBs. The same cuts the other way too (caught
+# 2026-09-06: Xavier Worthy had real receiving yards/receptions but no
+# touchdown market at all, and the first version of this list didn't
+# require one) — rush_rec_tds is the only touchdown-scoring category WR/
+# RB/TE have, so it's required for all three, same as pass_tds is for a
+# QB's passing touchdowns. What stays deliberately optional: a QB's own
+# rushing production (rush_yds/rush_rec_tds) and an RB's receiving work,
+# since both are real, legitimate zeros for plenty of players (a pocket
+# passer, a between-the-tackles back) rather than a market that just
+# hasn't posted yet.
 REQUIRED_STATS_BY_POSITION = {
     "QB": {"pass_yds", "pass_tds", "interceptions"},
-    "RB": {"rush_yds"},
-    "WR": {"reception_yds", "receptions"},
-    "TE": {"reception_yds", "receptions"},
+    "RB": {"rush_yds", "rush_rec_tds"},
+    "WR": {"reception_yds", "receptions", "rush_rec_tds"},
+    "TE": {"reception_yds", "receptions", "rush_rec_tds"},
 }
 
 
