@@ -1442,10 +1442,6 @@ def refresh(skip_odds: bool = False, db: Session = Depends(get_db), x_refresh_to
             if result["unmatched"]:
                 notes.append(f"{len(result['unmatched'])} player name(s) didn't match our roster")
 
-            snapshot_count = capture_threshold_snapshots(db, week)
-            notes.append(f"Captured {snapshot_count} threshold snapshot(s) for the historical % chance charts")
-            prediction_count = capture_prediction_snapshots(db, week)
-            notes.append(f"Captured {prediction_count} headline-score snapshot(s) for the trend charts")
             _PLAYER_ROWS_CACHE.clear()  # so the new data shows immediately, not after the cache TTL
         except Exception:
             # Never surface the raw exception text on the public dashboard
@@ -1471,6 +1467,24 @@ def refresh(skip_odds: bool = False, db: Session = Depends(get_db), x_refresh_to
     except Exception:
         logging.exception("Kalshi refresh failed")
         notes.append("Kalshi refresh failed, check server logs for details")
+
+    # Daily history capture, deliberately OUTSIDE the Odds API block above.
+    # These two read what's already in the database rather than calling any
+    # API, so a skipped (?skip_odds=true) or failed odds pull should still
+    # put the day on record instead of silently punching a hole in the trend
+    # charts — and in the accuracy history they accumulate for backtesting,
+    # where a missing day can't be recovered after the fact. Runs after
+    # Kalshi as well, so the captured Sportsbook number reflects Kalshi's
+    # contribution rather than the pre-Kalshi state it used to freeze.
+    try:
+        snapshot_count = capture_threshold_snapshots(db, week)
+        notes.append(f"Captured {snapshot_count} threshold snapshot(s) for the historical % chance charts")
+        prediction_count = capture_prediction_snapshots(db, week)
+        notes.append(f"Captured {prediction_count} headline-score snapshot(s) for the trend charts")
+        _PLAYER_ROWS_CACHE.clear()
+    except Exception:
+        logging.exception("Snapshot capture failed")
+        notes.append("Snapshot capture failed, check server logs for details")
 
     if settings.fantasypros_api_key:
         try:
