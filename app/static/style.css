@@ -416,9 +416,21 @@ tbody tr:hover td.go { opacity: 1; }
 
 .blended-link:hover { border-bottom-color: var(--accent); }
 
-.row-trend { margin-left: 0.5rem; vertical-align: middle; color: var(--accent); }
+/* Fixed width on both, matching the sparkline's own 64px (_mini_sparkline_svg
+   in main.py) — td.num right-aligns the whole cell as one inline run, so
+   without a reserved slot the same width on both cases, the blended number
+   itself shifts left or right depending on whether a real 64px-wide
+   sparkline or a narrow "—" follows it, and the numbers stop lining up
+   down the column. */
+.row-trend, .row-trend-empty {
+    display: inline-block;
+    width: 64px;
+    margin-left: 0.5rem;
+    vertical-align: middle;
+}
+.row-trend { color: var(--accent); }
 .row-trend svg { vertical-align: middle; }
-.row-trend-empty { margin-left: 0.5rem; color: var(--rule-strong); }
+.row-trend-empty { color: var(--rule-strong); text-align: center; }
 
 /* ---------- player detail ---------- */
 
