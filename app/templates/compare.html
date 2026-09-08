@@ -153,24 +153,6 @@
                         </template>
                     </div>
                 </template>
-                <div class="metric">
-                    <div class="metric-head">Expert perspective</div>
-                    <template x-if="!playerA.expert && !playerB.expert">
-                        <p class="metric-note">No expert rankings for this week yet.</p>
-                    </template>
-                    <template x-if="playerA.expert || playerB.expert">
-                        <div>
-                            <div class="bar-row">
-                                <span class="bar-name" x-text="shortName(playerA)"></span>
-                                <span x-text="playerA.expert || '—'"></span>
-                            </div>
-                            <div class="bar-row">
-                                <span class="bar-name" x-text="shortName(playerB)"></span>
-                                <span x-text="playerB.expert || '—'"></span>
-                            </div>
-                        </div>
-                    </template>
-                </div>
             </section>
             <p class="axis-note">Every bar runs on the same 0 to <span x-text="AXIS_MAX"></span> point axis, so lengths are directly comparable.</p>
         </div>

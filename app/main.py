@@ -17,18 +17,16 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.db import Base, engine, get_db, SessionLocal
-from app.models import Player, DfsProjection, OddsProp, ExpertRank, ThresholdSnapshot, PredictionSnapshot
+from app.models import Player, DfsProjection, OddsProp, ThresholdSnapshot, PredictionSnapshot
 from app.name_utils import normalize_name
 from app.config import get_settings
-from app.data_sources.sleeper import sync_players, fetch_current_week, fetch_current_season
+from app.data_sources.sleeper import sync_players, fetch_current_week
 from app.data_sources.odds_api import sync_odds, DFS_SOURCE_LABELS
 from app.data_sources.kalshi import sync_kalshi
-from app.data_sources.fantasypros import sync_fantasypros
 from app.scoring.blend import (
     dfs_projection_points,
     betting_derived_points,
     blend_expected_points,
-    expert_perspective,
     MARKET_TO_STAT,
     STAT_TO_RULE,
     DISCRETE_COUNT_STATS,
@@ -731,19 +729,10 @@ def _player_rows(db, week, scoring, scoring_format):
     for row in db.query(OddsProp).filter_by(week=week).all():
         props_by_player.setdefault(row.player_id, []).append(row)
 
-    # setdefault (not a plain dict comprehension) so the first ExpertRank
-    # row per player wins, matching the old per-player .first() semantics,
-    # in case more than one ever exists for the same player/week (e.g.
-    # different scoring formats).
-    expert_by_player = {}
-    for row in db.query(ExpertRank).filter_by(week=week).all():
-        expert_by_player.setdefault(row.player_id, row)
-
     rows = []
     for player in db.query(Player).all():
         projections = projections_by_player.get(player.id, [])
         props = props_by_player.get(player.id, [])
-        expert = expert_by_player.get(player.id)
 
         dfs_pts = dfs_projection_points(projections) if scoring_format == "half_ppr" else None
         betting_pts = betting_derived_points(props, scoring)
@@ -751,8 +740,6 @@ def _player_rows(db, week, scoring, scoring_format):
 
         if blended is None:
             continue  # no data at all for this player yet, skip rather than show an empty row
-
-        expert_persp = expert_perspective(player.position, expert.position_rank if expert else None)
 
         boom_stat = MAIN_STAT_BY_POSITION.get(player.position)
         boom_prob = None
@@ -777,7 +764,6 @@ def _player_rows(db, week, scoring, scoring_format):
             "dfs_pts": dfs_pts,
             "betting_pts": betting_pts,
             "blended": blended,
-            "expert": expert_persp.label if expert_persp else None,
             "boom_stat": boom_stat,
             "boom_prob": boom_prob,
             "boom_points_upside": boom_points_upside,
@@ -875,7 +861,6 @@ def dashboard(request: Request, week: int = None, position: str = None, note: st
         "scoring_format": scoring_format,
         "scoring_format_label": SCORING_FORMAT_LABELS[scoring_format],
         "odds_configured": bool(settings.odds_api_key),
-        "fantasypros_configured": bool(settings.fantasypros_api_key),
         "note": note,
         "active_page": "dashboard",
         "is_demo_week": is_demo_week,
@@ -1038,8 +1023,6 @@ def player_detail(request: Request, player_id: str, week: int = None, format: st
         .order_by(OddsProp.market, OddsProp.bookmaker)
         .all()
     )
-    expert = db.query(ExpertRank).filter_by(player_id=player.id, week=week).first()
-
     # one query for every threshold's snapshot history (3B.10), grouped so
     # the per-threshold loop below can just look up its own trend by key
     history_by_stat_threshold = {}
@@ -1225,7 +1208,6 @@ def player_detail(request: Request, player_id: str, week: int = None, format: st
     dfs_pts = dfs_projection_points(dfs_rows) if scoring_format == "half_ppr" else None
     betting_pts = betting_derived_points(props, scoring)
     blended = blend_expected_points(dfs_pts, betting_pts)
-    expert_persp = expert_perspective(player.position, expert.position_rank if expert else None)
 
     # feeds the summary-box hover breakdowns: what the DFS Projection /
     # Sportsbook Projection / Blended numbers are actually built from, in
@@ -1289,7 +1271,6 @@ def player_detail(request: Request, player_id: str, week: int = None, format: st
         "betting_breakdown": betting_breakdown,
         "blended_breakdown": blended_breakdown,
         "blended": blended,
-        "expert": expert_persp,
         "headline_trend": headline_trend,
         "headline_trend_json": _script_safe_json(headline_trend),
         "boom": boom,
@@ -1419,9 +1400,9 @@ def refresh(skip_odds: bool = False, db: Session = Depends(get_db), x_refresh_to
     rejected rather than silently allowed through.
 
     `?skip_odds=true` runs everything except the Odds API pull - useful
-    for retrying Kalshi or FantasyPros on their own (both free/flat-fee)
-    without re-spending Odds API credits on sportsbook lines that are
-    still fresh from an earlier call this same session."""
+    for retrying Kalshi on its own (free) without re-spending Odds API
+    credits on sportsbook lines that are still fresh from an earlier call
+    this same session."""
     settings = get_settings()
     if not settings.refresh_secret or not secrets.compare_digest(x_refresh_token or "", settings.refresh_secret):
         raise HTTPException(status_code=401, detail="Missing or invalid X-Refresh-Token header")
@@ -1485,57 +1466,6 @@ def refresh(skip_odds: bool = False, db: Session = Depends(get_db), x_refresh_to
     except Exception:
         logging.exception("Snapshot capture failed")
         notes.append("Snapshot capture failed, check server logs for details")
-
-    if settings.fantasypros_api_key:
-        try:
-            season = fetch_current_season()
-            fp_stored = 0
-            fp_unmatched = set()
-            fp_rate_limited = []
-            fp_errors = []
-            # Rankings differ by scoring format, and the site supports more
-            # than half_ppr elsewhere, so pull all three rather than only
-            # the default — FantasyPros is a flat monthly fee, not
-            # metered per call, so there's no cost reason to hold back.
-            # Each call is paced against FantasyPros' own rate limit
-            # (confirmed 2026-09-05: 12 calls back-to-back started
-            # returning 429 partway through), so this loop runs slower
-            # than the other sources on purpose.
-            fp_budget_exceeded = False
-            for scoring_format in SCORING_RULES:
-                fp_result = sync_fantasypros(season, week, scoring_format, db)
-                fp_stored += fp_result["players_stored"]
-                fp_unmatched.update(fp_result["unmatched"])
-                fp_rate_limited.extend(
-                    f"{pos}/{scoring_format}" for pos in fp_result["rate_limited_positions"]
-                )
-                fp_errors.extend(
-                    f"{pos}/{scoring_format}: {summary}" for pos, summary in fp_result["errors"]
-                )
-                if fp_result["budget_exceeded"]:
-                    # The remaining scoring formats would hit the exact
-                    # same daily cap - stop here rather than burning
-                    # through the whole loop just to confirm that again.
-                    fp_budget_exceeded = True
-                    break
-            notes.append(f"FantasyPros: stored {fp_stored} expert rank(s) across all scoring formats")
-            if fp_unmatched:
-                notes.append(f"{len(fp_unmatched)} FantasyPros player name(s) didn't match our roster")
-            if fp_rate_limited:
-                notes.append(f"Still rate-limited, skipped: {', '.join(fp_rate_limited)}")
-            if fp_budget_exceeded:
-                notes.append("FantasyPros daily call budget reached, stopped early - try again tomorrow")
-            if fp_errors:
-                # No server-log access to check otherwise, so the actual
-                # status code/body goes straight into the note itself
-                # (see _short_error_summary - never the key, it travels as
-                # a header not a URL param, and never the full raw
-                # exception, same rule the Odds API side follows).
-                notes.append(f"FantasyPros errors: {'; '.join(fp_errors)}")
-            _PLAYER_ROWS_CACHE.clear()
-        except Exception:
-            logging.exception("FantasyPros refresh failed")
-            notes.append("FantasyPros refresh failed, check server logs for details")
 
     query = ""
     if notes:

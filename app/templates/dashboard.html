@@ -10,10 +10,9 @@
     {% endif %}
 
     <div>
-        {% if not odds_configured or not fantasypros_configured %}
+        {% if not odds_configured %}
         <div class="notice">
-            {% if not odds_configured %}<p>Odds API key not set: sportsbook-projection points and DFS (Underdog/PrizePicks) projections are unavailable until you add ODDS_API_KEY to .env.</p>{% endif %}
-            {% if not fantasypros_configured %}<p>FantasyPros API key not set: expert perspective is unavailable until you add FANTASYPROS_API_KEY to .env.</p>{% endif %}
+            <p>Odds API key not set: sportsbook-projection points and DFS (Underdog/PrizePicks) projections are unavailable until you add ODDS_API_KEY to .env.</p>
         </div>
         {% endif %}
 
@@ -84,7 +83,6 @@
                         {% endif %}
                         <th class="num sortable" :class="{sorted: sortKey === 'betting_pts'}" @click="sortBy('betting_pts')">Sportsbook proj. <span class="sort-cue" x-text="arrow('betting_pts')"></span></th>
                         <th class="num sortable" :class="{sorted: sortKey === 'blended'}" @click="sortBy('blended')">Blended <span class="sort-cue" x-text="arrow('blended')"></span></th>
-                        <th>Expert</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -119,13 +117,12 @@
                                 <span class="row-trend" x-show="row.trend_svg" x-html="row.trend_svg"></span>
                                 <span class="row-trend-empty" x-show="!row.trend_svg">—</span>
                             </td>
-                            <td x-text="row.expert || '—'"></td>
                             <td class="go">&rarr;</td>
                         </tr>
                     </template>
                     {% if rows %}
                     <tr x-show="filteredRows.length === 0">
-                        <td colspan="{{ 10 if scoring_format == 'half_ppr' else 9 }}" class="empty-state">
+                        <td colspan="{{ 9 if scoring_format == 'half_ppr' else 8 }}" class="empty-state">
                             No players match your filters.
                         </td>
                     </tr>

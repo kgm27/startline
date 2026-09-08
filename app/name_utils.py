@@ -1,5 +1,5 @@
 """Canonical player-name normalization, shared by anything that compares or
-joins player names across data sources (Sleeper, The Odds API, FantasyPros)
+joins player names across data sources (Sleeper, The Odds API, Kalshi)
 or resolves a name typed by a person (the Ask assistant).
 
 Kept in one place instead of re-implemented per source: two independent

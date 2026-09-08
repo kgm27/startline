@@ -44,7 +44,7 @@ FUZZY_SUGGESTION_COUNT = 3
 FUZZY_MIN_SCORE = 60  # 0-100; below this a "suggestion" is just noise
 
 SYSTEM_PROMPT = """You are the assistant for StartLine, a fantasy football site that blends \
-DFS projections, sportsbook betting lines, and expert consensus into one expected-points \
+DFS projections and sportsbook/prediction-market betting lines into one expected-points \
 number per player, called the blended score.
 
 You help people make start/sit decisions.
@@ -228,8 +228,7 @@ def _compose_answer(
             f"blended {row['blended']}, DFS projection {row['dfs_pts']}, "
             f"sportsbook projection {row['betting_pts']}, "
             f"injury {row['injury'] or 'none'}, "
-            f"high ceiling {'yes' if row.get('boom_flag') else 'no'}, "
-            f"expert perspective {row.get('expert') or 'unavailable'}."
+            f"high ceiling {'yes' if row.get('boom_flag') else 'no'}."
         )
 
     data_block = "\n".join(data_lines) if data_lines else "No players were resolved for this question."

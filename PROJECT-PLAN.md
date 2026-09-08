@@ -174,6 +174,19 @@ The plan has two parts:
       FantasyPros-ranked skill players matched; the ~25 unmatched are mostly fullbacks, a position this site
       doesn't track at all, plus a handful of free agents not in the active roster sync).
 
+**2026-09-07 — REMOVED, not just hidden.** After 3.2-3.5 shipped, the API turned genuinely unreliable: a real
+429 (rate-limited pulling all 3 scoring formats back-to-back — fixed with pacing), then every call failing
+with a clean 403 Forbidden even after rotating to a brand-new key (still 403, from a completely different
+network) — a state neither the key, the rate-limit fix, nor anything on this end could explain or resolve.
+Owner cancelled the FantasyPros subscription rather than keep debugging a vendor-side block. Same treatment
+as the Start/Sit removal: actually deleted, not hidden behind a flag — `app/data_sources/fantasypros.py`
+removed entirely, `ExpertRank` model and table dropped, `expert_perspective()`/`ExpertPerspective` removed
+from `blend.py`, every "Expert Rankings"/"Expert Perspective" reference removed from Dashboard, Player
+detail, Compare, About, the landing page, and the Ask assistant's system prompt. The site now blends **two**
+inputs (DFS + Sportsbook/Market Odds), not three — About's "Three inputs" section is "Two inputs," its
+subtitle updated to match. If FantasyPros (or a different expert-rankings source) comes back later, this is
+a from-scratch rebuild, not a re-enable.
+
 ## Phase 3B — Prediction-trend feature (new)
 
 *Goal: show how a player's projection is moving over time — a line chart fed by a daily data pull. This is a

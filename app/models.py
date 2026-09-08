@@ -83,16 +83,3 @@ class PredictionSnapshot(Base):
     blended = Column(Float)
     snapshot_date = Column(Date, index=True)  # calendar day this reading was captured
     updated_at = Column(DateTime)
-
-
-class ExpertRank(Base):
-    """Weekly consensus rank/tier from the FantasyPros ECR API."""
-    __tablename__ = "expert_ranks"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    player_id = Column(String, index=True)
-    week = Column(Integer, index=True)
-    position_rank = Column(Integer)  # e.g. 8 = 8th-ranked at his position
-    tier = Column(Integer)  # FantasyPros tier grouping
-    scoring_format = Column(String)  # std / half_ppr / ppr
-    updated_at = Column(DateTime)

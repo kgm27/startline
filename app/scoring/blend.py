@@ -1,20 +1,12 @@
 """Implements the methodology from the project brief, Section 5:
-odds -> point estimate, blend with DFS projections, apply expert-agreement lens.
+odds -> point estimate, blend with DFS projections.
 """
-from dataclasses import dataclass
 from statistics import NormalDist
 from typing import Optional
 
 from app.models import OddsProp, DfsProjection
 from app.scoring.config import ScoringRules
 from app.data_sources.odds_api import american_odds_to_implied_probability
-
-# Roughly how many players at a position are considered "startable" by
-# consensus — used to translate an expert position-rank into a plain-language
-# tier. Rough industry rule-of-thumb, not calibrated to any specific league
-# format — same caveat as LINE_MARKET_CV below.
-EXPERT_STARTER_RANK_CUTOFF = {"QB": 12, "RB": 24, "WR": 30, "TE": 12}
-EXPERT_FLEX_RANK_CUTOFF = {"QB": 18, "RB": 36, "WR": 42, "TE": 18}
 
 # Maps every raw market key (main line AND its _alternate variant, where one
 # exists) to one canonical stat name, so alternate-line data pools together
@@ -346,23 +338,5 @@ def blend_expected_points(
     if betting_points is None:
         return dfs_points
     return round(dfs_points * dfs_weight + betting_points * (1 - dfs_weight), 2)
-
-
-@dataclass
-class ExpertPerspective:
-    label: str  # e.g. "Top 12 at position", "Flex-worthy", "Bench"
-    considers_startable: bool
-
-
-def expert_perspective(position: str, position_rank: Optional[int]) -> Optional[ExpertPerspective]:
-    if position_rank is None:
-        return None
-    starter_cutoff = EXPERT_STARTER_RANK_CUTOFF.get(position, 12)
-    flex_cutoff = EXPERT_FLEX_RANK_CUTOFF.get(position, 24)
-    if position_rank <= starter_cutoff:
-        return ExpertPerspective(f"Top {starter_cutoff} at position", considers_startable=True)
-    if position_rank <= flex_cutoff:
-        return ExpertPerspective("Flex-worthy", considers_startable=True)
-    return ExpertPerspective("Bench", considers_startable=False)
 
 
