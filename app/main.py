@@ -2,6 +2,7 @@
 import itertools
 import json
 import logging
+import math
 import os
 import secrets
 import time
@@ -492,19 +493,42 @@ def _thin_thresholds(items, min_gap=5):
 _chart_gradient_ids = itertools.count()
 
 
-def _trend_chart_svg(points, width=280, height=132, css_class="sparkline", value_fmt=None, max_value=None):
+def _nice_tick_step(rough_step):
+    """Rounds a rough tick step up to a "nice" step for an axis: 0.5, 1, 2,
+    2.5, 5, or 10 times a power of ten (10, 20, 25, 50, 100, ...). Always at
+    least 0.5, so every axis this feeds only ever shows tick values that are
+    a clean multiple of 0.5 - never an arbitrary decimal like 0.37 or 1.83."""
+    if rough_step <= 0.5:
+        return 0.5
+    base_steps = (0.5, 1, 2, 2.5, 5, 10)
+    exponent = 0
+    while True:
+        for base in base_steps:
+            step = base * (10 ** exponent)
+            if step >= rough_step:
+                return step
+        exponent += 1
+
+
+def _trend_chart_svg(points, width=280, height=132, css_class="sparkline", value_fmt=None, max_value=None, tick_scale=1.0):
     """Shared renderer for both the real trend chart (once real history
     exists) and the illustrative placeholder mockup (before it does), so a
     preview looks exactly like the real thing. `points` is
     [(date_label, value), ...], oldest first, at least 2 entries. The
     y-axis is always scaled tightly around the data's own range (with some
     headroom) rather than a fixed range, the same "let the real numbers
-    set the scale" approach used throughout this app. `value_fmt` controls
+    set the scale" approach used throughout this app - but the tick values
+    themselves are snapped to a "nice" step (see `_nice_tick_step`) so the
+    axis reads 20, 21, 22 rather than 20.4, 21.1, 21.8. `value_fmt` controls
     how a raw value is printed on the axis (defaults to a 0-1 probability
     as a percentage); `max_value` optionally caps the top of the range
-    (e.g. 1.0 for a probability, left uncapped for a points total). X-axis
-    tick labels are thinned to at most 5 so dates don't overlap once real
-    history grows past a handful of days; the line and dots still plot
+    (e.g. 1.0 for a probability, left uncapped for a points total).
+    `tick_scale` converts a raw value into the units the axis should look
+    "nice" in before picking a step - 1.0 for a chart already in the
+    display units (points), 100 for a 0-1 probability displayed as a
+    percentage, so the step is a clean 1%/2%/5% rather than 0.01/0.02/0.05.
+    X-axis tick labels are thinned to at most 5 so dates don't overlap once
+    real history grows past a handful of days; the line and dots still plot
     every point regardless."""
     value_fmt = value_fmt or (lambda v: f"{v * 100:.0f}%")
     values = [v for _, v in points]
@@ -518,6 +542,18 @@ def _trend_chart_svg(points, width=280, height=132, css_class="sparkline", value
     if max_value is not None:
         hi = min(hi, max_value)
     span = hi - lo or 0.02
+
+    # Snap the tick step to a nice multiple of 0.5 (in display units), then
+    # expand lo/hi out to the nearest step boundary so the gridlines land on
+    # those clean values instead of clipping to the padded data range.
+    target_ticks = 3
+    rough_step = (span * tick_scale) / target_ticks
+    tick_step = _nice_tick_step(rough_step) / tick_scale
+    lo = math.floor(lo / tick_step) * tick_step
+    hi = math.ceil(hi / tick_step) * tick_step
+    if max_value is not None:
+        hi = min(hi, math.ceil(max_value / tick_step) * tick_step)
+    span = hi - lo or tick_step
 
     pad_left, pad_right, pad_top, pad_bottom = 38, 10, 10, 22
     chart_w = width - pad_left - pad_right
@@ -553,7 +589,8 @@ def _trend_chart_svg(points, width=280, height=132, css_class="sparkline", value
         f'<path d="{area_path}" fill="url(#{gradient_id})" stroke="none"/>'
     )
 
-    y_ticks = sorted({hi, (lo + hi) / 2, lo}, reverse=True)
+    y_tick_count = round(span / tick_step) + 1
+    y_ticks = sorted({round(lo + i * tick_step, 6) for i in range(y_tick_count)}, reverse=True)
     y_axis = "".join(
         f'<text x="{pad_left - 6}" y="{pad_top + chart_h - ((v - lo) / span) * chart_h + 3:.1f}" '
         f'text-anchor="end" class="spark-axis-label">{value_fmt(v)}</text>'
@@ -604,7 +641,7 @@ def _sparkline_svg(history):
     if len(history) < 2:
         return ""
     points = [(d.strftime("%b %-d"), p) for d, p in history]
-    return _trend_chart_svg(points, css_class="sparkline", max_value=1.0)
+    return _trend_chart_svg(points, css_class="sparkline", max_value=1.0, tick_scale=100)
 
 
 def _placeholder_sparkline_svg(current_probability):
@@ -624,7 +661,7 @@ def _placeholder_sparkline_svg(current_probability):
     offsets = [-0.05, 0.02, -0.035, 0.015, 0.0]
     values = [min(max(current_probability + o, 0.01), 0.99) for o in offsets]
     points = [(d.strftime("%b %-d"), v) for d, v in zip(dates, values)]
-    return _trend_chart_svg(points, css_class="sparkline sparkline-placeholder", max_value=1.0)
+    return _trend_chart_svg(points, css_class="sparkline sparkline-placeholder", max_value=1.0, tick_scale=100)
 
 
 def _prediction_trend_svg(history, width=560, height=170):
