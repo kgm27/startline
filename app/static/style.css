@@ -514,6 +514,15 @@ a.summary-value:hover, .summary-value.hover-tag:hover { color: var(--accent); }
 .trend-chart-wrap { color: var(--accent); }
 .trend-chart-wrap svg { max-width: 100%; height: auto; }
 
+/* The chart line/dots/fill pick up currentColor from .trend-chart-wrap
+   above; these three never had a rule at all, so the axis label text
+   rendered at the browser's ~13.5px body default (too wide for its own
+   margin, clipping the leading digit) and the gridline/axis line were
+   fully invisible (stroke defaults to none, not currentColor). */
+.spark-axis-label { font-size: 10px; fill: var(--muted); }
+.spark-gridline { stroke: var(--rule); stroke-width: 1; }
+.spark-axis-line { stroke: var(--rule-strong); stroke-width: 1; }
+
 .boom-callout {
     border-left: 2px solid var(--accent);
     padding: 0.15rem 0 0.15rem 0.85rem;

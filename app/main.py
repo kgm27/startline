@@ -519,7 +519,7 @@ def _trend_chart_svg(points, width=280, height=132, css_class="sparkline", value
         hi = min(hi, max_value)
     span = hi - lo or 0.02
 
-    pad_left, pad_right, pad_top, pad_bottom = 34, 10, 10, 22
+    pad_left, pad_right, pad_top, pad_bottom = 38, 10, 10, 22
     chart_w = width - pad_left - pad_right
     chart_h = height - pad_top - pad_bottom
 
@@ -569,9 +569,17 @@ def _trend_chart_svg(points, width=280, height=132, css_class="sparkline", value
     else:
         step = (n - 1) / (max_labels - 1)
         label_idx = sorted({round(i * step) for i in range(max_labels)})
+    # The first/last labels sit right at the chart's own left/right edge
+    # (that's where the first/last data point is), so centering their text
+    # there like the interior labels get lets half of a wide label (e.g.
+    # "Sep 13") overhang past the SVG's own boundary and get clipped -
+    # anchoring them start/end instead keeps the text entirely inside the
+    # viewBox no matter how wide it is, without needing to guess a padding
+    # value that happens to be wide enough.
     x_axis = "".join(
-        f'<text x="{coords[i][0]:.1f}" y="{height - 5}" text-anchor="middle" class="spark-axis-label">'
-        f"{labels[i]}</text>"
+        f'<text x="{coords[i][0]:.1f}" y="{height - 5}" '
+        f'text-anchor="{"start" if i == 0 else "end" if i == n - 1 else "middle"}" '
+        f'class="spark-axis-label">{labels[i]}</text>'
         for i in label_idx
     )
 
