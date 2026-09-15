@@ -1482,6 +1482,59 @@ def capture_prediction_snapshots(db: Session, week: int) -> int:
     return written
 
 
+@app.get("/debug/kalshi-vs-sportsbook")
+def debug_kalshi_vs_sportsbook(week: int, db: Session = Depends(get_db), x_refresh_token: str = Header(None)):
+    """One-off diagnostic, not linked anywhere in the UI: for a given week,
+    finds where Kalshi's price disagrees most with the sportsbook consensus
+    at the same threshold. Reuses the exact same de-vig math the site
+    itself uses (_pooled_survival_curve) on two separate slices of the same
+    props - Kalshi alone vs. every other book alone - so the two numbers
+    being diffed are each computed exactly the way the site already
+    displays them, just not pooled together. Gated behind the same refresh
+    secret as /refresh: it's a free read, not a paid one, but it walks
+    every OddsProp row for a week and has no reason to be public."""
+    settings = get_settings()
+    if not settings.refresh_secret or not secrets.compare_digest(x_refresh_token or "", settings.refresh_secret):
+        raise HTTPException(status_code=401, detail="Missing or invalid X-Refresh-Token header")
+
+    props_by_group = {}
+    for prop in db.query(OddsProp).filter_by(week=week).all():
+        props_by_group.setdefault((prop.player_id, prop.market), []).append(prop)
+
+    rows = []
+    for (player_id, market), props in props_by_group.items():
+        kalshi_props = [p for p in props if p.bookmaker == "kalshi"]
+        book_props = [p for p in props if p.bookmaker != "kalshi"]
+        if not kalshi_props or not book_props:
+            continue
+        kalshi_curve = _pooled_survival_curve(kalshi_props)
+        book_curve = _pooled_survival_curve(book_props)
+        for line, k_prob in kalshi_curve.items():
+            b_prob = book_curve.get(line)
+            if b_prob is None:
+                continue
+            rows.append({
+                "player_id": player_id,
+                "market": market,
+                "stat": MARKET_TO_STAT.get(market, market),
+                "line": line,
+                "kalshi_probability": round(k_prob, 4),
+                "sportsbook_probability": round(b_prob, 4),
+                "disparity": round(abs(k_prob - b_prob), 4),
+                "sportsbook_count": len({p.bookmaker for p in book_props if p.line == line}),
+            })
+
+    rows.sort(key=lambda r: r["disparity"], reverse=True)
+    top = rows[:25]
+    player_names = {
+        p.id: p.name for p in db.query(Player).filter(Player.id.in_([r["player_id"] for r in top])).all()
+    }
+    for r in top:
+        r["player_name"] = player_names.get(r["player_id"], r["player_id"])
+
+    return {"week": week, "lines_compared": len(rows), "top": top}
+
+
 @app.post("/refresh")
 def refresh(skip_odds: bool = False, db: Session = Depends(get_db), x_refresh_token: str = Header(None)):
     """Pulls fresh data from every source that's currently set up. Requires
