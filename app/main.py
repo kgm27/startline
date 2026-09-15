@@ -1514,20 +1514,47 @@ def debug_raw_props(
     ]
 
 
+def _raw_survival_curve(props):
+    """Like blend.py's _pooled_survival_curve, but deliberately skips
+    de-vigging: averages each book's RAW (vig-included) implied
+    probability at each threshold instead of stripping the bookmaker's
+    margin out first. This is the price a bettor actually pays to make
+    that bet, not the de-vigged "fair value" estimate the site's own
+    projections are built from - kept separate from blend.py on purpose
+    so this diagnostic-only view never leaks into the real scoring math."""
+    by_threshold = {}
+    for prop in props:
+        if prop.line is None:
+            continue
+        if prop.odds is not None:
+            p = american_odds_to_implied_probability(prop.odds)
+        elif prop.implied_probability is not None:
+            p = prop.implied_probability
+        else:
+            continue
+        by_threshold.setdefault(prop.line, []).append(p)
+    return {threshold: sum(ps) / len(ps) for threshold, ps in by_threshold.items()}
+
+
 @app.get("/debug/kalshi-vs-sportsbook")
-def debug_kalshi_vs_sportsbook(week: int, db: Session = Depends(get_db), x_refresh_token: str = Header(None)):
+def debug_kalshi_vs_sportsbook(
+    week: int, devig: bool = False, db: Session = Depends(get_db), x_refresh_token: str = Header(None),
+):
     """One-off diagnostic, not linked anywhere in the UI: for a given week,
-    finds where Kalshi's price disagrees most with the sportsbook consensus
-    at the same threshold. Reuses the exact same de-vig math the site
-    itself uses (_pooled_survival_curve) on two separate slices of the same
-    props - Kalshi alone vs. every other book alone - so the two numbers
-    being diffed are each computed exactly the way the site already
-    displays them, just not pooled together. Gated behind the same refresh
-    secret as /refresh: it's a free read, not a paid one, but it walks
-    every OddsProp row for a week and has no reason to be public."""
+    finds where Kalshi's price disagrees most with the sportsbooks at the
+    same threshold. Defaults to RAW prices on both sides - what a bettor
+    would actually pay/receive at each venue, no vig removed - since
+    that's the real, tradeable comparison; pass ?devig=true to instead use
+    the de-vigged "fair value" pooling the site's own projections use
+    (_pooled_survival_curve), which is not what a bettor experiences at
+    either venue. Gated behind the same refresh secret as /refresh: it's a
+    free read, not a paid one, but it walks every OddsProp row for a week
+    and has no reason to be public."""
     settings = get_settings()
     if not settings.refresh_secret or not secrets.compare_digest(x_refresh_token or "", settings.refresh_secret):
         raise HTTPException(status_code=401, detail="Missing or invalid X-Refresh-Token header")
+
+    curve_fn = _pooled_survival_curve if devig else _raw_survival_curve
 
     props_by_group = {}
     for prop in db.query(OddsProp).filter_by(week=week).all():
@@ -1539,8 +1566,12 @@ def debug_kalshi_vs_sportsbook(week: int, db: Session = Depends(get_db), x_refre
         book_props = [p for p in props if p.bookmaker != "kalshi"]
         if not kalshi_props or not book_props:
             continue
-        kalshi_curve = _pooled_survival_curve(kalshi_props)
-        book_curve = _pooled_survival_curve(book_props)
+        # Kalshi's own price is already a real, tradeable mid-market number
+        # (bid/ask spread netted out at ingestion - see kalshi.py), so it's
+        # never de-vigged further either way; only the sportsbook side
+        # switches between raw and de-vigged.
+        kalshi_curve = _raw_survival_curve(kalshi_props)
+        book_curve = curve_fn(book_props)
         for line, k_prob in kalshi_curve.items():
             b_prob = book_curve.get(line)
             if b_prob is None:
@@ -1552,6 +1583,7 @@ def debug_kalshi_vs_sportsbook(week: int, db: Session = Depends(get_db), x_refre
                 "line": line,
                 "kalshi_probability": round(k_prob, 4),
                 "sportsbook_probability": round(b_prob, 4),
+                "sportsbook_pricing": "devigged" if devig else "raw",
                 "disparity": round(abs(k_prob - b_prob), 4),
                 "sportsbook_count": len({p.bookmaker for p in book_props if p.line == line}),
             })
