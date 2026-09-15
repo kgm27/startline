@@ -1525,7 +1525,13 @@ def debug_kalshi_vs_sportsbook(week: int, db: Session = Depends(get_db), x_refre
             })
 
     rows.sort(key=lambda r: r["disparity"], reverse=True)
-    top = rows[:25]
+    # Returns everything, not just a top slice: the raw disparity ranking
+    # skews toward long-tail thresholds (a 10-point gap on a ~20% line
+    # reads bigger than the same 10 points on a ~55% line), so the caller
+    # may want to re-slice by probability range rather than trust this
+    # ordering alone. 204 rows for a typical week is small enough to just
+    # return in full.
+    top = rows
     player_names = {
         p.id: p.name for p in db.query(Player).filter(Player.id.in_([r["player_id"] for r in top])).all()
     }
