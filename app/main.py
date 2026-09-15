@@ -22,7 +22,7 @@ from app.models import Player, DfsProjection, OddsProp, ThresholdSnapshot, Predi
 from app.name_utils import normalize_name
 from app.config import get_settings
 from app.data_sources.sleeper import sync_players, fetch_current_week
-from app.data_sources.odds_api import sync_odds, DFS_SOURCE_LABELS
+from app.data_sources.odds_api import sync_odds, DFS_SOURCE_LABELS, american_odds_to_implied_probability
 from app.data_sources.kalshi import sync_kalshi
 from app.data_sources.actuals import fetch_week_stats, actual_points, played, current_season
 from app.scoring.blend import (
@@ -1480,6 +1480,38 @@ def capture_prediction_snapshots(db: Session, week: int) -> int:
 
     db.commit()
     return written
+
+
+@app.get("/debug/raw-props")
+def debug_raw_props(
+    week: int, player_id: str, market: str,
+    db: Session = Depends(get_db), x_refresh_token: str = Header(None),
+):
+    """One-off diagnostic, not linked anywhere in the UI: dumps the raw
+    OddsProp rows behind one player/market/week so a pooled number reported
+    elsewhere (e.g. /debug/kalshi-vs-sportsbook) can be checked against the
+    real per-book prices it was built from."""
+    settings = get_settings()
+    if not settings.refresh_secret or not secrets.compare_digest(x_refresh_token or "", settings.refresh_secret):
+        raise HTTPException(status_code=401, detail="Missing or invalid X-Refresh-Token header")
+
+    props = (
+        db.query(OddsProp)
+        .filter_by(week=week, player_id=player_id, market=market)
+        .order_by(OddsProp.line, OddsProp.bookmaker)
+        .all()
+    )
+    return [
+        {
+            "bookmaker": p.bookmaker,
+            "line": p.line,
+            "odds": p.odds,
+            "under_odds": p.under_odds,
+            "implied_probability": p.implied_probability,
+            "raw_over_probability": round(american_odds_to_implied_probability(p.odds), 4) if p.odds is not None else None,
+        }
+        for p in props
+    ]
 
 
 @app.get("/debug/kalshi-vs-sportsbook")
