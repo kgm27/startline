@@ -437,9 +437,16 @@ def _resolve_week(db, requested_week):
     (off-season, or before the first pull of a new season posts anything),
     fall back to the most recent week that actually has real data, so the
     site shows the Week 15 2025 backtest instead of a blank page. Returns
-    (week, is_demo). is_demo is True whenever the displayed week isn't
-    genuinely the current live week, so callers can show a "demo data"
-    banner rather than silently passing off stale data as current."""
+    (week, is_demo). is_demo is True only for that fallback substitution -
+    the one case where we're silently showing something other than what was
+    asked for - so callers can show a "demo data" banner rather than passing
+    stale data off as current. An explicit ?week=N is never flagged demo,
+    even once the live season has moved past it: once real per-week data
+    exists (unlike when this flag was first added, when any non-current
+    week necessarily meant the old fixed backtest), a past week of the
+    CURRENT season is real data honestly labeled by its own week number,
+    not a substitution - mislabeling Week 1 as "2025 demo" the moment
+    Week 2 kicks off would be actively wrong, not just over-cautious."""
     if requested_week is not None and not (1 <= requested_week <= 30):
         # A regular season + playoffs never exceeds this range; anything
         # outside it is a malformed/abusive ?week= value (e.g. a huge
@@ -454,7 +461,7 @@ def _resolve_week(db, requested_week):
         pass
 
     if requested_week is not None:
-        return requested_week, requested_week != current_week
+        return requested_week, False
 
     def _has_data(w):
         return (

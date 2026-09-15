@@ -932,3 +932,24 @@ a cheap **daily** headline pull (feeds the Phase 3B trend chart) and the fuller 
   synthetic PredictionSnapshot against a real 2026 Week 1 stat line (Parker Washington: projected
   10.10 blended, actual 16.80, diff +6.7), then removed the test row, same pattern as 3B.10's
   original verification.
+- 2026-09-15 — Found and fixed a real, live bug while verifying the above: the moment Sleeper's
+  current week ticked over to 2 (Week 1 games having wrapped), every `/player/{id}?week=1` page —
+  including the dashboard's own generated links — started showing "Demo data: Week 1, 2025 season"
+  on real, live 2026 Week 1 data. Root cause: `_resolve_week()`'s `is_demo` flag was `requested_week
+  != current_week`, a rule from D3 (2026-07-30) written back when the only non-current-week data in
+  the DB WAS the fixed Week 15 2025 backtest, so "not the current week" and "showing substituted
+  demo data" were the same thing at the time. They stopped being the same thing the moment real
+  per-week 2026 data started accumulating: Week 1 is now real data honestly labeled by its own
+  week number, not a substitution, once Week 2 becomes current. Fixed: an explicit `?week=N` is
+  never flagged demo now (real data for the week you asked for is never "demo," no matter how
+  current the live week is) — `is_demo` fires only for the actual silent-fallback path (no
+  `?week=` given, current week has no data yet), which is the one case the flag's docstring always
+  said it was for. No other behavior depends on `is_demo_week` besides the banner text on
+  Dashboard/Compare/Player detail/About, so this is a pure trigger-condition fix, not a redesign.
+  Also matters for the new Projected-vs-actual section above, which is deliberately gated off
+  during a genuine demo/off-season fallback (unknown season) — before this fix that gate was
+  incorrectly also suppressing the feature on the real, just-finished Week 1.
+  🟡 Noted, not yet fixed: nothing in the schema records which *season* a row belongs to, so once
+  real Week 15 2026 data starts landing (~Dec 2026) it will coexist under the same `week=15` key as
+  the still-present Week 15 2025 demo rows, with no column to tell them apart. Worth a real
+  `season` column before then; not urgent today.
