@@ -916,3 +916,19 @@ a cheap **daily** headline pull (feeds the Phase 3B trend chart) and the fuller 
   refusal path, and 375px/1200px layout. 🔴 UNTESTED: the live model call, pending an Anthropic
   API key. To finish: owner creates a key at console.anthropic.com (prepaid, $5 minimum, roughly
   1,000 questions), adds ANTHROPIC_API_KEY to .env, restart. Owner paused here 2026-08-02.
+- 2026-09-14 — Added "Projected vs. actual" to the Player detail page: once a game's been played,
+  compares the LAST projection captured before kickoff (from the existing PredictionSnapshot
+  history, not today's live numbers) against what the player actually did. New free data source
+  (`app/data_sources/actuals.py`): Sleeper's public per-week stats endpoint, keyed by the same
+  player_id already used everywhere else, no API key, no credit cost. Actual points are priced
+  with the same ScoringRules and the same stat scope as the projections (no fumbles/2PT/return
+  yards) so the comparison is apples-to-apples — mirrors scripts/backtest_accuracy.py's pricer
+  exactly, deliberately kept in sync with it rather than duplicating divergent logic. Only shows
+  up once Sleeper's stat line has `gp`/`gms_active` >= 1 (a real "played" signal, not just a
+  roster entry existing) — no fabricated "0.0 actual" for a player whose game hasn't happened yet.
+  Deliberately skipped during the off-season demo week: nothing in the schema records which season
+  a row belongs to, and the demo fallback is a fixed past-season week, so pairing it with
+  `current_season()`'s stats could silently compare the wrong two seasons. Verified locally with a
+  synthetic PredictionSnapshot against a real 2026 Week 1 stat line (Parker Washington: projected
+  10.10 blended, actual 16.80, diff +6.7), then removed the test row, same pattern as 3B.10's
+  original verification.

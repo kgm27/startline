@@ -98,6 +98,31 @@
     </section>
     {% endif %}
 
+    {% if actual_result %}
+    <h2 class="section-head" id="projected-vs-actual">Projected vs. actual</h2>
+    <p class="player-meta">Projection as it stood on {{ actual_result.projected_date.strftime("%b %-d") }}, the last
+        reading captured before this comparison; actual points priced with the same scoring rules, real stats only
+        (no fumbles/2-point/return yardage — neither projection is trying to predict those either).</p>
+    <section class="summary-box">
+        <div>
+            <span class="summary-label">DFS Projection</span>
+            <span class="summary-value">{{ "%.2f"|format(actual_result.dfs_pts) if actual_result.dfs_pts is not none else "—" }}</span>
+        </div>
+        <div>
+            <span class="summary-label">Sportsbook Projection</span>
+            <span class="summary-value">{{ "%.2f"|format(actual_result.betting_pts) if actual_result.betting_pts is not none else "—" }}</span>
+        </div>
+        <div>
+            <span class="summary-label">Blended</span>
+            <span class="summary-value">{{ "%.2f"|format(actual_result.blended) if actual_result.blended is not none else "—" }}</span>
+        </div>
+        <div class="lead">
+            <span class="summary-label">Actual{% if actual_result.blended_diff is not none %} ({{ "%+.1f"|format(actual_result.blended_diff) }} vs. Blended){% endif %}</span>
+            <span class="summary-value">{{ "%.2f"|format(actual_result.actual_pts) }}</span>
+        </div>
+    </section>
+    {% endif %}
+
     {% if boom %}
     <div class="boom-callout">
         {% if boom.probability is not none %}

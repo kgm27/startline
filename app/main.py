@@ -24,6 +24,7 @@ from app.config import get_settings
 from app.data_sources.sleeper import sync_players, fetch_current_week
 from app.data_sources.odds_api import sync_odds, DFS_SOURCE_LABELS
 from app.data_sources.kalshi import sync_kalshi
+from app.data_sources.actuals import fetch_week_stats, actual_points, played, current_season
 from app.scoring.blend import (
     dfs_projection_points,
     betting_derived_points,
@@ -1303,6 +1304,43 @@ def player_detail(request: Request, player_id: str, week: int = None, format: st
             "is_placeholder": not svg,
         }
 
+    # Projected vs. Actual (real box-score stats, once the game's been
+    # played): compares the LAST projection captured before kickoff - not
+    # today's live numbers, which could reflect a later refresh - against
+    # what actually happened, priced with the same ScoringRules so it's an
+    # apples-to-apples comparison with DFS/Sportsbook/Blended above. Needs
+    # both a captured pre-game snapshot and a real "played" stat line from
+    # Sleeper's free stats endpoint; either missing (game hasn't happened
+    # yet, bye week, or no snapshot was ever captured for an older week)
+    # just leaves this section off the page rather than showing a fabricated
+    # "0.0 actual". Also skipped entirely for the off-season demo week: that
+    # fallback data is a fixed real week from a past season (see
+    # _resolve_week), but nothing in the schema records which season a row
+    # belongs to, so `current_season()` (today's actual calendar season)
+    # would ask Sleeper for the wrong season's stats - safer to just not
+    # show a comparison than risk pairing a 2025 demo projection with a
+    # same-numbered week's 2026 result.
+    actual_result = None
+    if prediction_snapshots and not is_demo_week:
+        last_snapshot = prediction_snapshots[-1]
+        try:
+            week_stats = fetch_week_stats(current_season(), week)
+        except Exception:
+            logging.exception("Fetching actual stats failed")
+            week_stats = {}
+        player_stats = week_stats.get(player.id)
+        if player_stats and played(player_stats):
+            actual_pts = actual_points(player_stats, scoring)
+            actual_result = {
+                "projected_date": last_snapshot.snapshot_date,
+                "dfs_pts": last_snapshot.dfs_pts,
+                "betting_pts": last_snapshot.betting_pts,
+                "blended": last_snapshot.blended,
+                "actual_pts": round(actual_pts, 1),
+            }
+            if last_snapshot.blended is not None:
+                actual_result["blended_diff"] = round(actual_pts - last_snapshot.blended, 1)
+
     return templates.TemplateResponse("player_detail.html", {
         "request": request,
         "player": player,
@@ -1318,6 +1356,7 @@ def player_detail(request: Request, player_id: str, week: int = None, format: st
         "blended": blended,
         "headline_trend": headline_trend,
         "headline_trend_json": _script_safe_json(headline_trend),
+        "actual_result": actual_result,
         "boom": boom,
         "boom_tag_tooltip": (
             _boom_tooltip_html(boom["probability"], boom["points_upside"], boom["stat"])
