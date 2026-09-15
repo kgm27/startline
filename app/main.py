@@ -23,7 +23,7 @@ from app.name_utils import normalize_name
 from app.config import get_settings
 from app.data_sources.sleeper import sync_players, fetch_current_week
 from app.data_sources.odds_api import sync_odds, DFS_SOURCE_LABELS, american_odds_to_implied_probability
-from app.data_sources.kalshi import sync_kalshi
+from app.data_sources.kalshi import sync_kalshi, fetch_live_quotes
 from app.data_sources.actuals import fetch_week_stats, actual_points, played, current_season
 from app.scoring.blend import (
     dfs_projection_points,
@@ -1603,6 +1603,112 @@ def debug_kalshi_vs_sportsbook(
         r["player_name"] = player_names.get(r["player_id"], r["player_id"])
 
     return {"week": week, "lines_compared": len(rows), "top": top}
+
+
+def _kalshi_fee(contracts: float, price: float) -> float:
+    """Kalshi's real per-trade taker fee: round up to the cent of
+    7% x contracts x price x (1-price), charged on both the buy and the
+    sell. Verified 2026-09-15 against a real fill (50 contracts @ 18c
+    cost exactly $0.52 in fees on top of the $9.00 principal) and against
+    Kalshi's own published fee schedule."""
+    if price <= 0 or price >= 1:
+        return 0.0
+    return math.ceil(0.07 * contracts * price * (1 - price) * 100) / 100
+
+
+@app.get("/debug/kalshi-opportunities")
+def debug_kalshi_opportunities(
+    week: int, stake: float = 30.0, candidates: int = 15,
+    db: Session = Depends(get_db), x_refresh_token: str = Header(None),
+):
+    """One-off diagnostic, not linked anywhere in the UI: finds the Kalshi
+    lines with the biggest gap to the raw sportsbook consensus, checks
+    each candidate's REAL live ask price (not the stored bid/ask midpoint
+    - see fetch_live_quotes), and computes the actual net profit on a
+    $`stake` position after Kalshi's real per-trade fee on both the buy
+    and an assumed sell at the sportsbook's price. Repeatable version of
+    the manual analysis worked through in chat on 2026-09-15. Only
+    live-checks the top `candidates` rows by raw disparity (default 15)
+    to keep the live-lookup pass small - one call-set per distinct market
+    series touched, not per candidate. A candidate whose price has
+    already caught up to (or passed) the sportsbook target, or whose
+    contract is no longer open, is silently dropped rather than shown
+    with a fake or negative "opportunity". Gated behind the same refresh
+    secret as /refresh."""
+    settings = get_settings()
+    if not settings.refresh_secret or not secrets.compare_digest(x_refresh_token or "", settings.refresh_secret):
+        raise HTTPException(status_code=401, detail="Missing or invalid X-Refresh-Token header")
+
+    props_by_group = {}
+    for prop in db.query(OddsProp).filter_by(week=week).all():
+        props_by_group.setdefault((prop.player_id, prop.market), []).append(prop)
+
+    disparities = []
+    for (player_id, market), props in props_by_group.items():
+        kalshi_props = [p for p in props if p.bookmaker == "kalshi"]
+        book_props = [p for p in props if p.bookmaker != "kalshi"]
+        if not kalshi_props or not book_props:
+            continue
+        kalshi_curve = _raw_survival_curve(kalshi_props)
+        book_curve = _raw_survival_curve(book_props)
+        for line, k_prob in kalshi_curve.items():
+            b_prob = book_curve.get(line)
+            if b_prob is None:
+                continue
+            disparities.append({
+                "player_id": player_id,
+                "market": market,
+                "line": line,
+                "sportsbook_probability": b_prob,
+                "sportsbook_count": len({p.bookmaker for p in book_props if p.line == line}),
+                "disparity": abs(k_prob - b_prob),
+            })
+    disparities.sort(key=lambda r: r["disparity"], reverse=True)
+    top_candidates = disparities[:candidates]
+
+    quotes_by_market = {
+        market: fetch_live_quotes(db, market) for market in {c["market"] for c in top_candidates}
+    }
+
+    opportunities = []
+    for c in top_candidates:
+        quote = quotes_by_market.get(c["market"], {}).get((c["player_id"], c["line"]))
+        if quote is None:
+            continue  # contract no longer open (or unavailable) right now
+        ask = quote["ask"]
+        if ask <= 0 or ask >= 1:
+            continue
+        sell_price = round(c["sportsbook_probability"] * 100) / 100  # nearest tradeable cent
+        if sell_price <= ask:
+            continue  # live price already caught up to the target - no edge left to show
+
+        contracts = stake / ask
+        buy_fee = _kalshi_fee(contracts, ask)
+        sell_fee = _kalshi_fee(contracts, sell_price)
+        total_cost = stake + buy_fee
+        proceeds = contracts * sell_price - sell_fee
+        profit = proceeds - total_cost
+
+        player = db.query(Player).get(c["player_id"])
+        opportunities.append({
+            "player_name": player.name if player else c["player_id"],
+            "stat": MARKET_TO_STAT.get(c["market"], c["market"]),
+            "line": c["line"],
+            "kalshi_bid": quote["bid"],
+            "kalshi_ask": ask,
+            "sportsbook_target": round(c["sportsbook_probability"], 4),
+            "sportsbook_count": c["sportsbook_count"],
+            "stake": stake,
+            "contracts": round(contracts, 1),
+            "total_cost_with_fee": round(total_cost, 2),
+            "sell_at": sell_price,
+            "net_proceeds_after_fee": round(proceeds, 2),
+            "profit": round(profit, 2),
+            "return_pct": round((profit / total_cost) * 100, 1),
+        })
+
+    opportunities.sort(key=lambda r: r["profit"], reverse=True)
+    return {"week": week, "stake": stake, "candidates_checked": len(top_candidates), "opportunities": opportunities}
 
 
 @app.post("/refresh")

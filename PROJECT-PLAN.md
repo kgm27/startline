@@ -953,3 +953,18 @@ a cheap **daily** headline pull (feeds the Phase 3B trend chart) and the fuller 
   real Week 15 2026 data starts landing (~Dec 2026) it will coexist under the same `week=15` key as
   the still-present Week 15 2025 demo rows, with no column to tell them apart. Worth a real
   `season` column before then; not urgent today.
+- 2026-09-15 — Built out the Kalshi-vs-sportsbook diagnostic into a repeatable, fee-aware
+  opportunity finder after a chat session walked through it manually (raw vs. de-vigged pricing,
+  a real $9 Kalshi fill exposing that the stored price is a bid/ask MIDPOINT not the real tradeable
+  ask, and confirming Kalshi's exact fee formula - round up of 7% x contracts x price x (1-price),
+  charged on both buy and sell - against that real fill). Investigated adding Polymarket to the
+  same comparison as requested; found it doesn't carry the matching market shape - no per-game,
+  per-player, per-threshold weekly contracts like Kalshi's, only season-long totals and field-wide
+  "weekly leader" markets - so it's out of scope until/unless that changes. New: `fetch_live_quotes()`
+  in kalshi.py (real bid/ask for a series' open contracts, not the stored midpoint) and
+  `GET /debug/kalshi-opportunities?week=&stake=` in main.py, which finds the biggest raw-price
+  disparities, live-checks only that top slice against Kalshi's real ask, and ranks by actual net
+  profit after both trade fees - not linked anywhere in the UI, gated behind the refresh secret,
+  intended to be checked by hand after a data refresh rather than surfaced publicly (owner's call:
+  private diagnostic, not a live site feature, and live-query the top candidates rather than add a
+  bid/ask column to the schema).

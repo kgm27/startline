@@ -112,6 +112,52 @@ def _upsert_kalshi_prop(db, player_id, week, market_key, line, implied_probabili
         ))
 
 
+def fetch_live_quotes(db, market_key: str) -> dict:
+    """Live bid/ask for every currently-open Kalshi contract in one series,
+    keyed by (player_id, line) — NOT persisted, and NOT the same thing as
+    what sync_kalshi() stores. The stored `implied_probability` is a
+    bid/ask midpoint (the market's fair-value estimate); this returns the
+    real two-sided price, since a real buy/sell happens at the ask/bid,
+    not the midpoint. Used for on-demand price checks (the profit-
+    opportunity diagnostic) where that distinction actually matters -
+    confirmed the hard way on 2026-09-15, when a reported 77c "price" for
+    a Jared Goff contract turned out to be a 70/84 bid/ask spread, not a
+    single tradeable number. Costs one call per open event in the series
+    (same as sync_kalshi's own pull), still free."""
+    series_ticker = next((s for s, m in SERIES_TO_MARKET.items() if m == market_key), None)
+    if series_ticker is None:
+        return {}
+
+    quotes = {}
+    try:
+        events = fetch_open_events(series_ticker)
+    except httpx.HTTPError:
+        return quotes
+    for event in events:
+        try:
+            markets = fetch_event_markets(event["event_ticker"])
+        except httpx.HTTPError:
+            continue
+        for market in markets:
+            if market.get("primary_participant_key") != "football_player":
+                continue
+            if market.get("strike_type") != "greater":
+                continue
+            line = market.get("floor_strike")
+            if line is None:
+                continue
+            try:
+                bid = float(market["yes_bid_dollars"])
+                ask = float(market["yes_ask_dollars"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            player = find_player_by_name(db, _player_name_from_title(market.get("title", "")))
+            if not player:
+                continue
+            quotes[(player.id, line)] = {"bid": bid, "ask": ask}
+    return quotes
+
+
 def sync_kalshi(week: int, db: SessionLocal = None) -> dict:
     """Pulls every mapped series' currently-open per-player contracts and
     stores them. Free — no credits, no key — so this can run as often as
