@@ -464,6 +464,13 @@ tbody tr:hover td.go { opacity: 1; }
     margin: 1.6rem 0 0;
 }
 
+/* The Past-weeks tab's single-week fallback reuses .summary-box with a
+   4th "Actual" cell - the base 150px minmax only fits 3 columns at
+   typical widths, leaving Actual to wrap alone onto its own row with a
+   bare gray cell next to it. A narrower minmax lets all 4 sit on one row
+   without changing the 3-item boxes elsewhere on the page. */
+.summary-box-quad { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+
 .summary-box > div {
     background: var(--paper);
     padding: 1rem 1.1rem 1.1rem;
@@ -522,6 +529,20 @@ a.summary-value:hover, .summary-value.hover-tag:hover { color: var(--accent); }
 .spark-axis-label { font-size: 10px; fill: var(--muted); }
 .spark-gridline { stroke: var(--rule); stroke-width: 1; }
 .spark-axis-line { stroke: var(--rule-strong); stroke-width: 1; }
+
+/* Past-weeks accuracy chart (player detail): two series share one chart,
+   so each needs its own explicit color rather than inheriting a single
+   currentColor from a wrapper the way every other chart on this site
+   does - .weekly-accuracy-projected/.weekly-accuracy-actual are the <g>
+   groups _weekly_accuracy_svg wraps each line in. */
+.weekly-accuracy-chart { max-width: 100%; height: auto; }
+.weekly-accuracy-projected { color: var(--accent); }
+.weekly-accuracy-actual { color: var(--ink); }
+
+.weekly-accuracy-legend { display: flex; gap: 1.2rem; font-size: 12px; color: var(--muted); margin-bottom: 0.7rem; }
+.weekly-accuracy-legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 0.4rem; }
+.weekly-accuracy-legend .dot.projected { background: var(--accent); }
+.weekly-accuracy-legend .dot.actual { background: var(--ink); }
 
 .boom-callout {
     border-left: 2px solid var(--accent);

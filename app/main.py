@@ -704,6 +704,90 @@ def _placeholder_prediction_trend_svg(current_value, width=560, height=170):
     )
 
 
+def _weekly_accuracy_svg(history, width=560, height=220):
+    """Two-series line chart for the Player detail page's "Past weeks" tab:
+    the Blended projection vs. the real result, one point per completed
+    week, so the shape of over/under-projecting is visible across a
+    season rather than read off one flat number at a time. `history` is
+    [(week_label, projected, actual), ...] oldest first, at least 2
+    entries - a single week can't draw a meaningful line, so the caller
+    falls back to the existing flat comparison box in that case instead
+    of calling this. Deliberately its own renderer rather than a second
+    call into _trend_chart_svg: that one draws a single series (toggled
+    between via tabs), while this always shows both lines on the same
+    chart at once, which needs its own legend and a y-axis scaled to
+    whichever series reaches higher/lower, not just one."""
+    labels = [l for l, _, _ in history]
+    projected = [p for _, p, _ in history]
+    actual = [a for _, _, a in history]
+    n = len(history)
+
+    all_values = projected + actual
+    lo, hi = min(all_values), max(all_values)
+    span = (hi - lo) or 0.02
+    headroom = span * 0.25
+    lo, hi = max(lo - headroom, 0.0), hi + headroom
+    span = hi - lo or 0.02
+
+    target_ticks = 3
+    tick_step = _nice_tick_step(span / target_ticks)
+    lo = math.floor(lo / tick_step) * tick_step
+    hi = math.ceil(hi / tick_step) * tick_step
+    span = hi - lo or tick_step
+
+    pad_left, pad_right, pad_top, pad_bottom = 38, 10, 10, 22
+    chart_w = width - pad_left - pad_right
+    chart_h = height - pad_top - pad_bottom
+
+    def xy(i, v):
+        x = pad_left + (i / (n - 1)) * chart_w if n > 1 else pad_left + chart_w / 2
+        y = pad_top + chart_h - ((v - lo) / span) * chart_h
+        return x, y
+
+    def line_and_dots(values, css_class):
+        coords = [xy(i, v) for i, v in enumerate(values)]
+        path = " ".join(f"{x:.1f},{y:.1f}" for x, y in coords)
+        dots = "".join(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3"/>' for x, y in coords)
+        return (
+            f'<g class="{css_class}">'
+            f'<polyline points="{path}" fill="none" stroke="currentColor" stroke-width="2" '
+            f'stroke-linecap="round" stroke-linejoin="round"/>'
+            f'<g fill="currentColor">{dots}</g>'
+            f"</g>"
+        )
+
+    projected_series = line_and_dots(projected, "weekly-accuracy-projected")
+    actual_series = line_and_dots(actual, "weekly-accuracy-actual")
+
+    y_tick_count = round(span / tick_step) + 1
+    y_ticks = sorted({round(lo + i * tick_step, 6) for i in range(y_tick_count)}, reverse=True)
+    y_axis = "".join(
+        f'<text x="{pad_left - 6}" y="{pad_top + chart_h - ((v - lo) / span) * chart_h + 3:.1f}" '
+        f'text-anchor="end" class="spark-axis-label">{v:.1f}</text>'
+        f'<line x1="{pad_left}" y1="{pad_top + chart_h - ((v - lo) / span) * chart_h:.1f}" '
+        f'x2="{width - pad_right}" y2="{pad_top + chart_h - ((v - lo) / span) * chart_h:.1f}" '
+        f'class="spark-gridline"/>'
+        for v in y_ticks
+    )
+
+    x_axis = "".join(
+        f'<text x="{xy(i, 0)[0]:.1f}" y="{height - 5}" '
+        f'text-anchor="{"start" if i == 0 else "end" if i == n - 1 else "middle"}" '
+        f'class="spark-axis-label">{labels[i]}</text>'
+        for i in range(n)
+    )
+
+    return (
+        f'<svg class="weekly-accuracy-chart" viewBox="0 0 {width} {height}" width="{width}" height="{height}">'
+        f"{y_axis}"
+        f'<line x1="{pad_left}" y1="{pad_top}" x2="{pad_left}" y2="{height - pad_bottom}" class="spark-axis-line"/>'
+        f"{projected_series}"
+        f"{actual_series}"
+        f"{x_axis}"
+        f"</svg>"
+    )
+
+
 def _mini_sparkline_svg(history, width=64, height=22):
     """A tiny, axis-free line for inline use in a Dashboard table cell:
     the Player detail page's tooltip charts are too large to fit inline in
@@ -1311,42 +1395,67 @@ def player_detail(request: Request, player_id: str, week: int = None, format: st
             "is_placeholder": not svg,
         }
 
-    # Projected vs. Actual (real box-score stats, once the game's been
-    # played): compares the LAST projection captured before kickoff - not
-    # today's live numbers, which could reflect a later refresh - against
-    # what actually happened, priced with the same ScoringRules so it's an
-    # apples-to-apples comparison with DFS/Sportsbook/Blended above. Needs
-    # both a captured pre-game snapshot and a real "played" stat line from
-    # Sleeper's free stats endpoint; either missing (game hasn't happened
-    # yet, bye week, or no snapshot was ever captured for an older week)
-    # just leaves this section off the page rather than showing a fabricated
-    # "0.0 actual". Also skipped entirely for the off-season demo week: that
-    # fallback data is a fixed real week from a past season (see
-    # _resolve_week), but nothing in the schema records which season a row
-    # belongs to, so `current_season()` (today's actual calendar season)
-    # would ask Sleeper for the wrong season's stats - safer to just not
-    # show a comparison than risk pairing a 2025 demo projection with a
-    # same-numbered week's 2026 result.
-    actual_result = None
-    if prediction_snapshots and not is_demo_week:
-        last_snapshot = prediction_snapshots[-1]
-        try:
-            week_stats = fetch_week_stats(current_season(), week)
-        except Exception:
-            logging.exception("Fetching actual stats failed")
-            week_stats = {}
-        player_stats = week_stats.get(player.id)
-        if player_stats and played(player_stats):
-            actual_pts = actual_points(player_stats, scoring)
-            actual_result = {
-                "projected_date": last_snapshot.snapshot_date,
-                "dfs_pts": last_snapshot.dfs_pts,
-                "betting_pts": last_snapshot.betting_pts,
-                "blended": last_snapshot.blended,
-                "actual_pts": round(actual_pts, 1),
-            }
-            if last_snapshot.blended is not None:
-                actual_result["blended_diff"] = round(actual_pts - last_snapshot.blended, 1)
+    # Past-weeks accuracy history (feeds the "Past weeks" tab): the Blended
+    # projection vs. what actually happened, for every week that's really
+    # concluded - independent of whichever week happens to be selected via
+    # ?week=, unlike the old single-week version this replaced. Each week
+    # uses its OWN last snapshot captured before that week's kickoff, not
+    # today's live numbers, priced with the same ScoringRules so it's
+    # apples-to-apples with DFS/Sportsbook/Blended. Bounded to weeks
+    # strictly before the real live NFL week (fetch_current_week()), not
+    # "not the requested week" - a real completed week can never be at or
+    # after the live week, which also means the fixed Week 15 2025 demo
+    # dataset can never leak in here once the real season reaches week 15:
+    # it predates PredictionSnapshot's existence and so was never given
+    # snapshot rows of its own, and even if it had been, week 15 simply
+    # isn't < the live week yet. A week missing either a snapshot or a
+    # real "played" stat line (game hasn't happened, bye week, or an older
+    # week from before this feature existed) is just left out rather than
+    # shown with a fabricated "0.0 actual".
+    weekly_accuracy_history = []
+    try:
+        live_week = fetch_current_week()
+    except Exception:
+        live_week = None
+    if live_week is not None:
+        past_snapshots = (
+            db.query(PredictionSnapshot)
+            .filter(PredictionSnapshot.player_id == player.id, PredictionSnapshot.week < live_week)
+            .order_by(PredictionSnapshot.week, PredictionSnapshot.snapshot_date)
+            .all()
+        )
+        last_snapshot_by_week = {}
+        for snap in past_snapshots:
+            last_snapshot_by_week[snap.week] = snap  # ascending date order, so last write wins
+
+        for wk in sorted(last_snapshot_by_week):
+            snap = last_snapshot_by_week[wk]
+            if snap.blended is None:
+                continue
+            try:
+                week_stats = fetch_week_stats(current_season(), wk)
+            except Exception:
+                logging.exception("Fetching actual stats failed for week %s", wk)
+                continue
+            player_stats = week_stats.get(player.id)
+            if not player_stats or not played(player_stats):
+                continue
+            actual_pts = round(actual_points(player_stats, scoring), 1)
+            weekly_accuracy_history.append({
+                "week": wk,
+                "projected_date": snap.snapshot_date,
+                "dfs_pts": snap.dfs_pts,
+                "betting_pts": snap.betting_pts,
+                "blended": snap.blended,
+                "actual_pts": actual_pts,
+                "diff": round(actual_pts - snap.blended, 1),
+            })
+
+    weekly_accuracy_svg = None
+    if len(weekly_accuracy_history) >= 2:
+        weekly_accuracy_svg = _weekly_accuracy_svg([
+            (f"Wk {h['week']}", h["blended"], h["actual_pts"]) for h in weekly_accuracy_history
+        ])
 
     return templates.TemplateResponse("player_detail.html", {
         "request": request,
@@ -1363,7 +1472,8 @@ def player_detail(request: Request, player_id: str, week: int = None, format: st
         "blended": blended,
         "headline_trend": headline_trend,
         "headline_trend_json": _script_safe_json(headline_trend),
-        "actual_result": actual_result,
+        "weekly_accuracy_history": weekly_accuracy_history,
+        "weekly_accuracy_svg": weekly_accuracy_svg,
         "boom": boom,
         "boom_tag_tooltip": (
             _boom_tooltip_html(boom["probability"], boom["points_upside"], boom["stat"])

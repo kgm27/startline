@@ -24,6 +24,15 @@
         </span>
     </div>
 
+    <div class="trend-tabs" style="margin: 1.2rem 0 0;">
+        <button type="button" class="pill" :class="{active: pageTab === 'current'}"
+                @click="pageTab = 'current'">Current week</button>
+        <button type="button" class="pill" :class="{active: pageTab === 'past'}"
+                @click="pageTab = 'past'">Past weeks</button>
+    </div>
+
+    <div x-show="pageTab === 'current'">
+
     {% if is_demo_week %}
     <div class="note-banner">
         Demo data: Week {{ week }}, 2025 season. A real backtest, not fabricated numbers, shown because it is
@@ -94,31 +103,6 @@
                 {% endif %}
             </div>
             {% endfor %}
-        </div>
-    </section>
-    {% endif %}
-
-    {% if actual_result %}
-    <h2 class="section-head" id="projected-vs-actual">Projected vs. actual</h2>
-    <p class="player-meta">Projection as it stood on {{ actual_result.projected_date.strftime("%b %-d") }}, the last
-        reading captured before this comparison; actual points priced with the same scoring rules, real stats only
-        (no fumbles/2-point/return yardage — neither projection is trying to predict those either).</p>
-    <section class="summary-box">
-        <div>
-            <span class="summary-label">DFS Projection</span>
-            <span class="summary-value">{{ "%.2f"|format(actual_result.dfs_pts) if actual_result.dfs_pts is not none else "—" }}</span>
-        </div>
-        <div>
-            <span class="summary-label">Sportsbook Projection</span>
-            <span class="summary-value">{{ "%.2f"|format(actual_result.betting_pts) if actual_result.betting_pts is not none else "—" }}</span>
-        </div>
-        <div>
-            <span class="summary-label">Blended</span>
-            <span class="summary-value">{{ "%.2f"|format(actual_result.blended) if actual_result.blended is not none else "—" }}</span>
-        </div>
-        <div class="lead">
-            <span class="summary-label">Actual{% if actual_result.blended_diff is not none %} ({{ "%+.1f"|format(actual_result.blended_diff) }} vs. Blended){% endif %}</span>
-            <span class="summary-value">{{ "%.2f"|format(actual_result.actual_pts) }}</span>
         </div>
     </section>
     {% endif %}
@@ -252,6 +236,51 @@
     <p class="note">No sportsbook props stored for this player/week.</p>
     {% endif %}
 
+    </div>
+
+    <div x-show="pageTab === 'past'" x-cloak>
+        <h2 class="section-head" id="past-weeks">Projected vs. actual, by week</h2>
+        {% if weekly_accuracy_svg %}
+        <p class="player-meta">Each week's projection is the last reading captured before that week's kickoff, not
+            a number reconstructed after the fact; actual points use the same scoring rules, real stats only (no
+            fumbles/2-point/return yardage — neither projection is trying to predict those either).</p>
+        <section class="trend-card">
+            <div class="weekly-accuracy-legend">
+                <span><span class="dot projected"></span>Blended projection</span>
+                <span><span class="dot actual"></span>Actual</span>
+            </div>
+            {{ weekly_accuracy_svg | safe }}
+        </section>
+        {% elif weekly_accuracy_history %}
+        {% set h = weekly_accuracy_history[0] %}
+        <p class="player-meta">Only one completed week so far — this becomes a graph once there's more than one.
+            Projection as it stood on {{ h.projected_date.strftime("%b %-d") }}, the last reading captured before
+            that week's kickoff; actual points use the same scoring rules, real stats only (no fumbles/2-point/
+            return yardage — neither projection is trying to predict those either).</p>
+        <section class="summary-box summary-box-quad">
+            <div>
+                <span class="summary-label">DFS Projection</span>
+                <span class="summary-value">{{ "%.2f"|format(h.dfs_pts) if h.dfs_pts is not none else "—" }}</span>
+            </div>
+            <div>
+                <span class="summary-label">Sportsbook Projection</span>
+                <span class="summary-value">{{ "%.2f"|format(h.betting_pts) if h.betting_pts is not none else "—" }}</span>
+            </div>
+            <div>
+                <span class="summary-label">Blended (Week {{ h.week }})</span>
+                <span class="summary-value">{{ "%.2f"|format(h.blended) if h.blended is not none else "—" }}</span>
+            </div>
+            <div class="lead">
+                <span class="summary-label">Actual ({{ "%+.1f"|format(h.diff) }} vs. Blended)</span>
+                <span class="summary-value">{{ "%.2f"|format(h.actual_pts) }}</span>
+            </div>
+        </section>
+        {% else %}
+        <p class="note">No completed weeks yet for {{ player.name }} this season. Check back once a week they've
+            played has wrapped.</p>
+        {% endif %}
+    </div>
+
     <div class="global-tooltip" :class="{ 'tooltip-visible': tooltipVisible, 'tooltip-above': tooltipAbove }"
          x-ref="tooltip"
          :style="`left:${tooltipX}px; top:${tooltipY}px;`"
@@ -263,6 +292,7 @@
 
     function playerDetail() {
         return {
+            pageTab: 'current',
             trendMetric: Object.keys(HEADLINE_TREND)[0] || null,
             tooltipVisible: false,
             tooltipText: '',

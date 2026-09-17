@@ -968,3 +968,21 @@ a cheap **daily** headline pull (feeds the Phase 3B trend chart) and the fuller 
   intended to be checked by hand after a data refresh rather than surfaced publicly (owner's call:
   private diagnostic, not a live site feature, and live-query the top candidates rather than add a
   bid/ask column to the schema).
+- 2026-09-17 — Turned the single-week "Projected vs. actual" box into a proper "Past weeks" tab on the Player
+  detail page, replacing it rather than keeping both. Two tabs now: "Current week" (everything the page already
+  showed - headline numbers, the pre-kickoff trend chart, DFS/Sportsbook breakdowns) and "Past weeks" (new -
+  every completed week's Blended projection vs. real result, as a two-line graph once there are 2+ weeks; a
+  single completed week reuses the old flat box instead of drawing a meaningless one-point line; zero completed
+  weeks shows a plain note). New `_weekly_accuracy_svg()` in main.py - a dedicated two-series renderer (own
+  legend, shared nice-tick-snapped y-axis) rather than overloading the existing single-series `_trend_chart_svg`.
+  The history query is bounded to weeks strictly before the real live NFL week (`fetch_current_week()`), not "not
+  the currently-selected week" - besides being the correct bound for an aggregate across ALL weeks regardless of
+  `?week=`, it also can't ever let the fixed Week 15 2025 demo dataset leak in once the real season reaches
+  week 15, since that data predates PredictionSnapshot's existence and so has no snapshot rows to match anyway.
+  Caught and fixed one real layout bug in review: the reused `.summary-box` grid (designed for 3 cells) only fit
+  3 of the box's 4 columns per row at normal widths, leaving "Actual" to wrap alone next to a bare gray cell -
+  added a `.summary-box-quad` modifier (narrower `minmax`) rather than touching the shared base class. Verified
+  locally: a synthetic single-week snapshot rendered the correct flat-box fallback (fixed the grid bug from this
+  same check), tab toggling and active-state styling confirmed in-browser, and the two-series SVG's structure/
+  tick values/coordinates spot-checked directly against synthetic 4-week data before deploying (a second real
+  completed week doesn't exist yet to test the live graph path end-to-end - Week 2 hasn't been played).
