@@ -1618,7 +1618,7 @@ def _kalshi_fee(contracts: float, price: float) -> float:
 
 @app.get("/debug/kalshi-opportunities")
 def debug_kalshi_opportunities(
-    week: int, stake: float = 30.0, candidates: int = 15,
+    week: int, stake: float = 30.0, candidates: int = 15, min_sportsbook_count: int = 4,
     db: Session = Depends(get_db), x_refresh_token: str = Header(None),
 ):
     """One-off diagnostic, not linked anywhere in the UI: finds the Kalshi
@@ -1627,14 +1627,21 @@ def debug_kalshi_opportunities(
     - see fetch_live_quotes), and computes the actual net profit on a
     $`stake` position after Kalshi's real per-trade fee on both the buy
     and an assumed sell at the sportsbook's price. Repeatable version of
-    the manual analysis worked through in chat on 2026-09-15. Only
-    live-checks the top `candidates` rows by raw disparity (default 15)
-    to keep the live-lookup pass small - one call-set per distinct market
-    series touched, not per candidate. A candidate whose price has
-    already caught up to (or passed) the sportsbook target, or whose
-    contract is no longer open, is silently dropped rather than shown
-    with a fake or negative "opportunity". Gated behind the same refresh
-    secret as /refresh."""
+    the manual analysis worked through in chat on 2026-09-15. Requires at
+    least `min_sportsbook_count` books on the same threshold before a line
+    is even a candidate (default 4): once a full alternate-line ladder is
+    posted mid-week, the raw-disparity ranking gets swamped by obscure,
+    barely-traded thresholds (e.g. a backup RB's "9.5+ rush yards" priced
+    off a single book) that read as huge gaps but aren't a real signal -
+    caught 2026-09-17 when a run came back with zero results because the
+    entire top-15 candidate slate was exactly that kind of noise. Only
+    live-checks the top `candidates` rows by disparity after that filter
+    (default 15) to keep the live-lookup pass small - one call-set per
+    distinct market series touched, not per candidate. A candidate whose
+    price has already caught up to (or passed) the sportsbook target, or
+    whose contract is no longer open, is silently dropped rather than
+    shown with a fake or negative "opportunity". Gated behind the same
+    refresh secret as /refresh."""
     settings = get_settings()
     if not settings.refresh_secret or not secrets.compare_digest(x_refresh_token or "", settings.refresh_secret):
         raise HTTPException(status_code=401, detail="Missing or invalid X-Refresh-Token header")
@@ -1655,12 +1662,15 @@ def debug_kalshi_opportunities(
             b_prob = book_curve.get(line)
             if b_prob is None:
                 continue
+            sportsbook_count = len({p.bookmaker for p in book_props if p.line == line})
+            if sportsbook_count < min_sportsbook_count:
+                continue
             disparities.append({
                 "player_id": player_id,
                 "market": market,
                 "line": line,
                 "sportsbook_probability": b_prob,
-                "sportsbook_count": len({p.bookmaker for p in book_props if p.line == line}),
+                "sportsbook_count": sportsbook_count,
                 "disparity": abs(k_prob - b_prob),
             })
     disparities.sort(key=lambda r: r["disparity"], reverse=True)
@@ -1708,7 +1718,13 @@ def debug_kalshi_opportunities(
         })
 
     opportunities.sort(key=lambda r: r["profit"], reverse=True)
-    return {"week": week, "stake": stake, "candidates_checked": len(top_candidates), "opportunities": opportunities}
+    return {
+        "week": week,
+        "stake": stake,
+        "min_sportsbook_count": min_sportsbook_count,
+        "candidates_checked": len(top_candidates),
+        "opportunities": opportunities,
+    }
 
 
 @app.post("/refresh")
