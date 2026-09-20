@@ -147,12 +147,29 @@ def fetch_upcoming_events() -> list[dict]:
     return resp.json()
 
 
+def _current_nfl_week_end(now: datetime) -> datetime:
+    """The moment the NFL week `now` falls in ends: the next Tuesday 09:00
+    UTC (~5am ET), after Monday night's game is over and before the next
+    week's first line moves. Every stored row is tagged with Sleeper's
+    current week, which doesn't flip until around then - so pulling games
+    from beyond this boundary (Thursday night's game of the NEXT week is
+    already inside an 8-day window by Sunday) would file next week's lines
+    under this week's number and overwrite real rows that share a player,
+    market, book, and line. Caught 2026-09-20, when a Sunday refresh would
+    have mixed 13 Week 3 games into Week 2."""
+    days_until_tuesday = (1 - now.weekday()) % 7
+    boundary = (now + timedelta(days=days_until_tuesday)).replace(hour=9, minute=0, second=0, microsecond=0)
+    if boundary <= now:
+        boundary += timedelta(days=7)
+    return boundary
+
+
 def fetch_near_term_events(days_ahead: int = 8) -> list[dict]:
     """Filters fetch_upcoming_events() down to games starting soon. Player
     props only exist close to game day, and pulling props per-event costs
     credits, so there's no point checking games weeks/months out."""
     now = datetime.now(timezone.utc)
-    cutoff = now + timedelta(days=days_ahead)
+    cutoff = min(now + timedelta(days=days_ahead), _current_nfl_week_end(now))
     near_term = []
     for event in fetch_upcoming_events():
         commence = datetime.fromisoformat(event["commence_time"].replace("Z", "+00:00"))
