@@ -13,6 +13,7 @@ class Settings:
     scoring_format: str
     db_path: str
     refresh_secret: str
+    enable_scheduled_refresh: bool
 
 
 def get_settings() -> Settings:
@@ -21,4 +22,9 @@ def get_settings() -> Settings:
         scoring_format=os.getenv("SCORING_FORMAT", "half_ppr"),
         db_path=str(Path(__file__).resolve().parent.parent / "data" / "advisor.db"),
         refresh_secret=os.getenv("REFRESH_SECRET", ""),
+        # Off by default so a local dev server never silently starts
+        # spending real Odds API credits on a schedule. Set to "true" in
+        # Render's env vars (not in a local .env) to turn on the daily
+        # 9:30am Pacific auto-refresh - see _start_scheduler() in main.py.
+        enable_scheduled_refresh=os.getenv("ENABLE_SCHEDULED_REFRESH", "").lower() == "true",
     )

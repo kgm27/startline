@@ -476,16 +476,33 @@ reads straight off that same curve (e.g. P(yards ≥ line + 30) is already in th
 *Goal: data updates itself on a schedule during the season, without spending credits carelessly. Two cadences:
 a cheap **daily** headline pull (feeds the Phase 3B trend chart) and the fuller **weekly** pull.*
 
-- [ ] **7.1** Add scheduled jobs (cron) matching the **D5 cadence**: the headline pulls that write trend snapshots
-      (Phase 3B.2) — 2×/day baseline, hourly 8am–1am ET on Sat & Sun, hourly on Thu/Mon nights — plus the **weekly**
-      fuller pull (full alternate lines). Both replace the removed manual button.
+- [x] **7.1** Add scheduled jobs (cron). Built 2026-09-23: **1×/day at 9:30am America/Los_Angeles**, not the full
+      D5 cadence — owner asked for "just once per day" specifically instead of D5's 2×/day + hourly weekend/night
+      cadence, which needs the 100K Odds API tier (see D5) that hasn't been purchased. Runs the exact same
+      `_run_refresh()` the manual `POST /refresh` button already used (refactored out of the route so there's only
+      one implementation, not two that could drift), via an in-process APScheduler `BackgroundScheduler` (see 7.4).
+      Gated behind `ENABLE_SCHEDULED_REFRESH` (off by default, must be set to `true` in Render's env vars) so a
+      local dev server never silently starts spending real Odds API credits on a schedule. Cost: roughly one full
+      `/refresh`'s worth of credits every day (~200–480 depending on the week/day, per observed pulls this
+      season) — well inside the 20K/mo plan at this cadence, unlike D5's full cadence. Also found and fixed a real
+      gap while building this: nothing had ever configured Python's logging level, so every `logging.exception()`
+      call in this file worked (ERROR always clears the default WARNING threshold) but a plain `logging.info()` -
+      needed so the scheduler's own "armed"/"finished" lines actually show up in Render's logs - was silently
+      dropped. Added `logging.basicConfig(level=logging.INFO)`, and explicitly quieted httpx's own per-request
+      logging back to WARNING (it would otherwise log all 60-80+ calls a single Kalshi sync makes, burying the one
+      meaningful daily line in noise). Verified locally: the scheduler arms with the correct next-run time,
+      DST-safe via a real IANA timezone (not a fixed UTC offset) rather than one that would drift an hour twice a
+      year, and both the success and failure paths of the scheduled job log correctly (mocked, not a real paid
+      pull, to avoid spending credits just to prove the refactor didn't change behavior).
 - [ ] **7.2** Make the jobs credit-aware: skip when there are no upcoming games (off-season/byes) so they don't
-      waste Odds API credits. Log what each run spent. Ties to **D5**.
-- [ ] **7.4** **Decide how the schedule runs (do this first — it governs 7.1).** Recommendation: run the scheduler
-      **inside the web app** (e.g. an APScheduler background job) so there's **no extra hosting cost**. The
-      alternatives — Render's separate Cron Jobs service or an external scheduler hitting the protected refresh
-      endpoint — are also fine but add a small cost and/or another moving part. Keep it in-process unless there's a
-      reason not to. *(This is also the only genuinely new cost decision surfaced in the 2026-07-29 cost review.)*
+      waste Odds API credits. Log what each run spent. Ties to **D5**. *(Not yet needed at 1x/day — 7.2 was aimed
+      at the much higher-frequency D5 cadence; the daily job already only spends when there's something to pull,
+      via the existing "no near-term games" handling in `sync_odds()`.)*
+- [x] **7.4** **Decide how the schedule runs.** Went with the recommendation: **in-process** (APScheduler
+      `BackgroundScheduler`), not Render's separate Cron Jobs service or an external scheduler hitting the
+      protected endpoint — no extra hosting cost, one fewer moving part. Safe specifically because this app runs
+      as one Render instance with one uvicorn worker (see `Procfile`, no `--workers` flag) — on multiple
+      instances/workers each would arm its own scheduler and the job would fire once per instance.
 
 ## Phase 8 — Final polish
 

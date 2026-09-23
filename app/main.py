@@ -14,8 +14,26 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
+from apscheduler.schedulers.background import BackgroundScheduler
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
+
+# Nothing configured the root logger before the scheduled-refresh feature,
+# so every logging.exception() call in this file has always worked
+# (.exception() always logs at ERROR, which clears Python's default
+# WARNING threshold) but a plain logging.info() would be silently
+# dropped - confirmed 2026-09-23 running the scheduler locally: the
+# startup log line never appeared. Render captures stdout, so this is
+# the only thing needed to make INFO-level logs (the scheduler's "armed"
+# and "finished" lines) actually visible there.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+# httpx logs every single outgoing request at INFO by default - harmless
+# at the size of one manual /refresh, but Kalshi's own sync alone makes
+# 60-80+ HTTP calls, which would otherwise bury the scheduler's one
+# meaningful "finished" line in noise every single day. Everything else
+# stays at the level set above.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 from app.db import Base, engine, get_db, SessionLocal
 from app.models import Player, DfsProjection, OddsProp, ThresholdSnapshot, PredictionSnapshot
@@ -1837,21 +1855,14 @@ def debug_kalshi_opportunities(
     }
 
 
-@app.post("/refresh")
-def refresh(skip_odds: bool = False, db: Session = Depends(get_db), x_refresh_token: str = Header(None)):
-    """Pulls fresh data from every source that's currently set up. Requires
-    a matching X-Refresh-Token header (see REFRESH_SECRET in .env) so a
-    stranger who finds this URL can't spend real Odds API credits. Fails
-    closed: if REFRESH_SECRET isn't configured at all, every request is
-    rejected rather than silently allowed through.
-
-    `?skip_odds=true` runs everything except the Odds API pull - useful
-    for retrying Kalshi on its own (free) without re-spending Odds API
-    credits on sportsbook lines that are still fresh from an earlier call
-    this same session."""
+def _run_refresh(db: Session, skip_odds: bool = False) -> list[str]:
+    """The actual refresh work, shared by the manual POST /refresh route
+    and the scheduled daily job (_start_scheduler) - one implementation,
+    two callers, so the automated run can never silently drift from what
+    a manual refresh does. Returns human-readable notes describing what
+    happened; never raises (each source's own failure is caught and
+    logged so one bad source can't sink the rest of the refresh)."""
     settings = get_settings()
-    if not settings.refresh_secret or not secrets.compare_digest(x_refresh_token or "", settings.refresh_secret):
-        raise HTTPException(status_code=401, detail="Missing or invalid X-Refresh-Token header")
     sync_players(db)
     week = fetch_current_week()
 
@@ -1913,8 +1924,69 @@ def refresh(skip_odds: bool = False, db: Session = Depends(get_db), x_refresh_to
         logging.exception("Snapshot capture failed")
         notes.append("Snapshot capture failed, check server logs for details")
 
+    return notes
+
+
+@app.post("/refresh")
+def refresh(skip_odds: bool = False, db: Session = Depends(get_db), x_refresh_token: str = Header(None)):
+    """Pulls fresh data from every source that's currently set up. Requires
+    a matching X-Refresh-Token header (see REFRESH_SECRET in .env) so a
+    stranger who finds this URL can't spend real Odds API credits. Fails
+    closed: if REFRESH_SECRET isn't configured at all, every request is
+    rejected rather than silently allowed through.
+
+    `?skip_odds=true` runs everything except the Odds API pull - useful
+    for retrying Kalshi on its own (free) without re-spending Odds API
+    credits on sportsbook lines that are still fresh from an earlier call
+    this same session."""
+    settings = get_settings()
+    if not settings.refresh_secret or not secrets.compare_digest(x_refresh_token or "", settings.refresh_secret):
+        raise HTTPException(status_code=401, detail="Missing or invalid X-Refresh-Token header")
+
+    notes = _run_refresh(db, skip_odds=skip_odds)
+
     query = ""
     if notes:
         from urllib.parse import quote
         query = f"?note={quote(' | '.join(notes))}"
     return RedirectResponse(url=f"/dashboard{query}", status_code=303)
+
+
+def _scheduled_refresh_job() -> None:
+    """Runs _run_refresh on its own DB session, for the daily cron job -
+    there's no HTTP request/response here, so the result is just logged
+    rather than turned into a redirect."""
+    db = SessionLocal()
+    try:
+        notes = _run_refresh(db)
+        logging.info("Scheduled refresh finished: %s", " | ".join(notes))
+    except Exception:
+        logging.exception("Scheduled refresh failed")
+    finally:
+        db.close()
+
+
+def _start_scheduler() -> None:
+    """Starts the daily 9:30am Pacific auto-refresh, replacing the owner
+    manually triggering /refresh every day (D5/7.1). Off by default - see
+    Settings.enable_scheduled_refresh - so a local dev server never starts
+    silently spending real Odds API credits on a schedule. Runs in-process
+    (APScheduler) rather than a separate Render Cron Jobs service or an
+    external scheduler hitting the endpoint, per 7.4's decision: no extra
+    hosting cost, one fewer moving part. Uses a real IANA timezone (not a
+    fixed UTC offset) so 9:30am stays 9:30am Pacific across the DST
+    transition rather than drifting an hour twice a year. Safe as a single
+    in-process job specifically because this app runs as one Render
+    instance with one uvicorn worker (see Procfile) - on multiple
+    instances/workers each would start its own scheduler and the job would
+    fire once per instance, duplicating (harmless but wasteful) API calls."""
+    scheduler = BackgroundScheduler(timezone="America/Los_Angeles")
+    scheduler.add_job(_scheduled_refresh_job, "cron", hour=9, minute=30, id="daily_refresh")
+    scheduler.start()
+    logging.info("Scheduled daily refresh armed: 9:30am America/Los_Angeles")
+
+
+@app.on_event("startup")
+def _on_startup() -> None:
+    if get_settings().enable_scheduled_refresh:
+        _start_scheduler()
