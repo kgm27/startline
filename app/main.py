@@ -1610,6 +1610,24 @@ def capture_prediction_snapshots(db: Session, week: int) -> int:
     return written
 
 
+@app.get("/debug/snapshots")
+def debug_snapshots(week: int, db: Session = Depends(get_db), x_refresh_token: str = Header(None)):
+    """One-off diagnostic, not linked anywhere in the UI: each player's LAST
+    PredictionSnapshot for a week (the last reading captured before that
+    week's games, same one the Past weeks graph uses), for backtesting
+    outside sources against what we actually projected. Token-gated."""
+    settings = get_settings()
+    if not settings.refresh_secret or not secrets.compare_digest(x_refresh_token or "", settings.refresh_secret):
+        raise HTTPException(status_code=401, detail="Missing or invalid X-Refresh-Token header")
+    last = {}
+    for snap in db.query(PredictionSnapshot).filter_by(week=week).order_by(PredictionSnapshot.snapshot_date).all():
+        last[snap.player_id] = snap
+    return {"week": week, "rows": [
+        {"player_id": pid, "date": str(s.snapshot_date), "dfs_pts": s.dfs_pts, "betting_pts": s.betting_pts, "blended": s.blended}
+        for pid, s in last.items()
+    ]}
+
+
 @app.get("/debug/dfs-sources")
 def debug_dfs_sources(week: int, db: Session = Depends(get_db), x_refresh_token: str = Header(None)):
     """One-off diagnostic, not linked anywhere in the UI: per player, each DFS
