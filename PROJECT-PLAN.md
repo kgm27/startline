@@ -1012,8 +1012,8 @@ a cheap **daily** headline pull (feeds the Phase 3B trend chart) and the fuller 
   formats labeled "Half PPR", and a different mix per player depending on who had a line. Tradeoffs accepted: a
   player the matching site hasn't posted has no DFS number in that format (Blended falls back to sportsbook alone,
   no cross-site substitute; Underdog covers ~75% of players vs PrizePicks ~97%), and the previously hidden
-  Full PPR DFS column is now shown. Betr/Pick6 never appeared in any stored week (only PrizePicks and Underdog),
-  so nothing is lost there. The player page still lists every stored site's raw number with its scoring format and
+  Full PPR DFS column is now shown. Betr/Pick6 never appeared in any real 2026 week 1-4 (only PrizePicks and Underdog; the
+  Week 15 2025 demo dataset does carry Betr rows from an old historical pull), so nothing is lost there. The player page still lists every stored site's raw number with its scoring format and
   marks the one used. Investigated while deciding: Sleeper's free projections endpoint has native std/half/PPR
   fantasy points, but a Weeks 1-3 backtest (588 player-weeks) found it no more accurate than the sportsbook/DFS
   numbers (MAE 5.14 vs 5.24 sportsbook, 5.05 raw DFS, 5.13 current Blended) and not independent (0.96 correlated
