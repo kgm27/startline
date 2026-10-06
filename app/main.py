@@ -1610,6 +1610,40 @@ def capture_prediction_snapshots(db: Session, week: int) -> int:
     return written
 
 
+@app.get("/debug/dfs-sources")
+def debug_dfs_sources(week: int, db: Session = Depends(get_db), x_refresh_token: str = Header(None)):
+    """One-off diagnostic, not linked anywhere in the UI: per player, each DFS
+    site's fantasy-points projection next to the market-implied expected
+    receptions and interceptions, to test whether the sites' differing
+    scoring rules (PrizePicks full PPR, Underdog half PPR) show up in the
+    numbers. Gated behind the refresh secret like the other /debug routes."""
+    settings = get_settings()
+    if not settings.refresh_secret or not secrets.compare_digest(x_refresh_token or "", settings.refresh_secret):
+        raise HTTPException(status_code=401, detail="Missing or invalid X-Refresh-Token header")
+
+    dfs_by_player = {}
+    for row in db.query(DfsProjection).filter_by(week=week).all():
+        dfs_by_player.setdefault(row.player_id, {})[row.source] = row.projected_points
+
+    props_by_player = {}
+    for prop in db.query(OddsProp).filter_by(week=week).all():
+        props_by_player.setdefault(prop.player_id, []).append(prop)
+
+    names = {p.id: (p.name, p.position) for p in db.query(Player).filter(Player.id.in_(list(dfs_by_player))).all()}
+    rows = []
+    for pid, sources in dfs_by_player.items():
+        expected = {}
+        for stat in ("receptions", "interceptions"):
+            stat_props = [p for p in props_by_player.get(pid, []) if MARKET_TO_STAT.get(p.market) == stat]
+            curve = _pooled_survival_curve(stat_props)
+            if curve and len(curve) >= MIN_THRESHOLDS_FOR_CURVE:
+                curve = _apply_stat_anchors(curve, stat)
+                expected[stat] = round(_discrete_tail_sum(curve), 2)
+        name, position = names.get(pid, (pid, None))
+        rows.append({"player": name, "position": position, "sources": sources, **{f"exp_{k}": v for k, v in expected.items()}})
+    return {"week": week, "players": len(rows), "rows": rows}
+
+
 @app.get("/debug/raw-props")
 def debug_raw_props(
     week: int, player_id: str, market: str,
