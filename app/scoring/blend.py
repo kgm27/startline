@@ -316,11 +316,30 @@ def betting_derived_points(props: list[OddsProp], scoring: ScoringRules) -> Opti
     return round(total, 2)
 
 
-def dfs_projection_points(projections: list[DfsProjection]) -> Optional[float]:
-    """Averages Underdog/PrizePicks projections when both are available."""
-    if not projections:
+# Each DFS site scores its "fantasy points" its own way: PrizePicks gives a
+# full point per reception (full PPR), Underdog half a point (half PPR) -
+# confirmed against our own data 2026-10-05, where PrizePicks ran ~0.54 pts
+# above Underdog per expected reception. Averaging them (what this used to
+# do) mixed two formats into one number labeled "Half PPR". Instead, each
+# format uses the site that scores that way natively, with no conversion:
+# no site scores Standard (0 per reception), so there is no DFS number there.
+DFS_SOURCE_FORMAT = {"underdog": "half_ppr", "prizepicks": "full_ppr"}
+DFS_SOURCE_BY_FORMAT = {fmt: source for source, fmt in DFS_SOURCE_FORMAT.items()}
+
+
+def dfs_projection_points(projections: list[DfsProjection], scoring_format: str = "half_ppr") -> Optional[float]:
+    """The DFS Projection for `scoring_format`: the one DFS site that scores
+    in that format natively (see DFS_SOURCE_FORMAT). None when no site
+    matches the format (Standard), or when that site hasn't posted a number
+    for this player - no fallback to the other site, since that would put a
+    differently-scored number under this format's label."""
+    source = DFS_SOURCE_BY_FORMAT.get(scoring_format)
+    if source is None:
         return None
-    return round(sum(p.projected_points for p in projections) / len(projections), 2)
+    matching = [p for p in projections if p.source == source]
+    if not matching:
+        return None
+    return round(sum(p.projected_points for p in matching) / len(matching), 2)
 
 
 def blend_expected_points(

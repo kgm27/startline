@@ -26,8 +26,8 @@
         <section class="hero-features" style="margin: 1rem 0 1.5rem;">
             <div class="feature-card">
                 <span class="feature-kicker">DFS Projections</span>
-                <p>Underdog, PrizePicks, and Betr Picks projections, already scored in fantasy points and
-                    averaged together.</p>
+                <p>Underdog (half PPR) and PrizePicks (full PPR) projections, already scored in fantasy
+                    points by each site.</p>
             </div>
             <div class="feature-card">
                 <span class="feature-kicker">Sportsbook &amp; Market Odds</span>
@@ -43,8 +43,9 @@
                 <div class="method-step-num">1</div>
                 <div class="method-step-body">
                     <h3>DFS Projection</h3>
-                    <p>Average the projected points across every DFS source that's posted a number for that
-                        player this week.</p>
+                    <p>Use the DFS site that scores in your format: Underdog for Half PPR, PrizePicks for Full
+                        PPR. The two score receptions differently, so their numbers are never mixed or
+                        converted. Standard has no matching site, so it has no DFS Projection.</p>
                 </div>
             </div>
             <div class="method-step">
@@ -82,7 +83,7 @@ This week's highest {{ scoring_format_label }} blended score belongs to
         </p>
         <div class="example-callout">
             <div class="example-nums">
-                {% if scoring_format == 'half_ppr' %}
+                {% if scoring_format != 'standard' %}
                 <div class="example-cell">
                     <span class="n">{{ "%.2f"|format(example.dfs_pts) if example.dfs_pts is not none else "—" }}</span>
                     <span class="k">DFS projection</span>

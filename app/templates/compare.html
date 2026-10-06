@@ -182,7 +182,7 @@
             allRows: ALL_ROWS,
             metrics: [
                 { key: 'blended', label: 'Blended' },
-                {% if scoring_format == 'half_ppr' %}
+                {% if scoring_format != 'standard' %}
                 { key: 'dfs_pts', label: 'DFS Projection' },
                 {% endif %}
                 { key: 'betting_pts', label: 'Sportsbook Projection' },

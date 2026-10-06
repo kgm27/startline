@@ -1003,3 +1003,23 @@ a cheap **daily** headline pull (feeds the Phase 3B trend chart) and the fuller 
   same check), tab toggling and active-state styling confirmed in-browser, and the two-series SVG's structure/
   tick values/coordinates spot-checked directly against synthetic 4-week data before deploying (a second real
   completed week doesn't exist yet to test the live graph path end-to-end - Week 2 hasn't been played).
+- 2026-10-05 — DFS Projection no longer averages Underdog and PrizePicks: each scoring format now uses the site
+  that scores that way natively, with no conversion (owner's call). Half PPR -> Underdog, Full PPR -> PrizePicks,
+  Standard -> no DFS number (no site scores 0 per reception). Why: the two sites score receptions differently
+  (PrizePicks 1.0, Underdog 0.5; PrizePicks' own scoring page confirms full PPR, Underdog's half PPR is from
+  secondary sources since its help page blocked fetching), and our data showed it - across 152 players the
+  PrizePicks-minus-Underdog gap tracked expected receptions at 0.54 pts each - so the old average was a mix of two
+  formats labeled "Half PPR", and a different mix per player depending on who had a line. Tradeoffs accepted: a
+  player the matching site hasn't posted has no DFS number in that format (Blended falls back to sportsbook alone,
+  no cross-site substitute; Underdog covers ~75% of players vs PrizePicks ~97%), and the previously hidden
+  Full PPR DFS column is now shown. Betr/Pick6 never appeared in any stored week (only PrizePicks and Underdog),
+  so nothing is lost there. The player page still lists every stored site's raw number with its scoring format and
+  marks the one used. Investigated while deciding: Sleeper's free projections endpoint has native std/half/PPR
+  fantasy points, but a Weeks 1-3 backtest (588 player-weeks) found it no more accurate than the sportsbook/DFS
+  numbers (MAE 5.14 vs 5.24 sportsbook, 5.05 raw DFS, 5.13 current Blended) and not independent (0.96 correlated
+  with the sportsbook number, 0.98 error correlation), so it was not added. The same backtest found half-PPR DFS
+  lines run ~1.1 pts below actual results on average (the current raw mix looked unbiased only because
+  PrizePicks' full-PPR points happened to offset that) - hypothesis, untested: pick'em lines sit near a median of
+  a right-skewed distribution. Revisit with 6-8 weeks of data. Known wrinkle: stored PredictionSnapshot rows from
+  before this change used the old averaged number, so the current week's DFS/Blended trend line can show a step
+  where the method switched. Private diagnostics added for the analysis: /debug/dfs-sources and /debug/snapshots.

@@ -45,6 +45,8 @@ from app.data_sources.kalshi import sync_kalshi, fetch_live_quotes
 from app.data_sources.actuals import fetch_week_stats, actual_points, played, current_season
 from app.scoring.blend import (
     dfs_projection_points,
+    DFS_SOURCE_FORMAT,
+    DFS_SOURCE_BY_FORMAT,
     betting_derived_points,
     blend_expected_points,
     MARKET_TO_STAT,
@@ -862,15 +864,15 @@ def _player_rows(db, week, scoring, scoring_format):
     behind a secret token and happens at most a few times a day, not on
     every page view.
 
-    `scoring_format` gates whether DFS Projection is included at all:
-    those numbers come pre-scored from Underdog/PrizePicks in whatever
-    format that DFS site uses (effectively Half PPR), and there's no raw
-    stat line behind them to re-score for Standard/Full PPR, unlike the
-    Sportsbook-derived side which is built from real market probabilities
-    per stat and can honor any scoring rule. Rather than show a
-    misleading number, DFS Projection (and the Blended average's DFS
-    half) is simply left out outside Half PPR, so Blended becomes the
-    Sportsbook-derived number alone in that case."""
+    `scoring_format` picks which DFS site feeds the DFS Projection: those
+    numbers come pre-scored in each site's own format (Underdog half PPR,
+    PrizePicks full PPR) with no raw stat line behind them to re-score, so
+    rather than convert or mix them, each format uses the site that scores
+    that way natively (see blend.DFS_SOURCE_FORMAT). Standard has no
+    matching site, and a player the matching site hasn't posted also has
+    no DFS number - in both cases Blended becomes the Sportsbook-derived
+    number alone, unlike that side, which is built from real market
+    probabilities per stat and can honor any scoring rule."""
     cache_key = (week, scoring_format)
     cached = _PLAYER_ROWS_CACHE.get(cache_key)
     if cached and time.time() - cached[0] < _PLAYER_ROWS_CACHE_TTL_SECONDS:
@@ -889,7 +891,7 @@ def _player_rows(db, week, scoring, scoring_format):
         projections = projections_by_player.get(player.id, [])
         props = props_by_player.get(player.id, [])
 
-        dfs_pts = dfs_projection_points(projections) if scoring_format == "half_ppr" else None
+        dfs_pts = dfs_projection_points(projections, scoring_format)
         betting_pts = betting_derived_points(props, scoring)
         blended = blend_expected_points(dfs_pts, betting_pts)
 
@@ -1360,9 +1362,18 @@ def player_detail(request: Request, player_id: str, week: int = None, format: st
         if not (row and row["boom_flag"]):
             boom = None
 
-    dfs_pts = dfs_projection_points(dfs_rows) if scoring_format == "half_ppr" else None
+    dfs_pts = dfs_projection_points(dfs_rows, scoring_format)
     betting_pts = betting_derived_points(props, scoring)
     blended = blend_expected_points(dfs_pts, betting_pts)
+
+    # The one DFS site that feeds this format's DFS Projection (None for
+    # Standard, which no site scores). The table below still lists every
+    # site's raw number, tagged with how it scores, so it's visible which
+    # one is used and why the other isn't mixed in.
+    dfs_used_source = DFS_SOURCE_BY_FORMAT.get(scoring_format)
+    dfs_source_formats = {
+        source: SCORING_FORMAT_LABELS[fmt] for source, fmt in DFS_SOURCE_FORMAT.items()
+    }
 
     # feeds the summary-box hover breakdowns: what the DFS Projection /
     # Sportsbook Projection / Blended numbers are actually built from, in
@@ -1371,6 +1382,7 @@ def player_detail(request: Request, player_id: str, week: int = None, format: st
     dfs_breakdown = [
         {"label": DFS_SOURCE_LABELS.get(row.source, row.source), "points": row.projected_points}
         for row in dfs_rows
+        if row.source == dfs_used_source
     ]
     betting_breakdown = [{"label": m["label"], "points": m["points"]} for m in markets]
     blended_breakdown = None
@@ -1481,6 +1493,8 @@ def player_detail(request: Request, player_id: str, week: int = None, format: st
         "week": week,
         "dfs_rows": dfs_rows,
         "dfs_source_labels": DFS_SOURCE_LABELS,
+        "dfs_used_source": dfs_used_source,
+        "dfs_source_formats": dfs_source_formats,
         "dfs_pts": dfs_pts,
         "dfs_breakdown": dfs_breakdown,
         "markets": markets,
@@ -1568,7 +1582,8 @@ def capture_prediction_snapshots(db: Session, week: int) -> int:
     updates today's row rather than piling up duplicates, same pattern as
     capture_threshold_snapshots(). Returns rows written/updated."""
     settings = get_settings()
-    scoring = SCORING_RULES.get(settings.scoring_format, SCORING_RULES["half_ppr"])
+    snapshot_format = settings.scoring_format if settings.scoring_format in SCORING_RULES else "half_ppr"
+    scoring = SCORING_RULES[snapshot_format]
     today = date.today()
     now = datetime.now(timezone.utc)
 
@@ -1577,7 +1592,7 @@ def capture_prediction_snapshots(db: Session, week: int) -> int:
         projections = db.query(DfsProjection).filter_by(player_id=player.id, week=week).all()
         props = db.query(OddsProp).filter_by(player_id=player.id, week=week).all()
 
-        dfs_pts = dfs_projection_points(projections)
+        dfs_pts = dfs_projection_points(projections, snapshot_format)
         betting_pts = betting_derived_points(props, scoring)
         blended = blend_expected_points(dfs_pts, betting_pts)
 

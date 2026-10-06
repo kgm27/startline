@@ -78,7 +78,7 @@
                         <th class="sortable" :class="{sorted: sortKey === 'name'}" @click="sortBy('name')">Player <span class="sort-cue" x-text="arrow('name')"></span></th>
                         <th>Pos</th>
                         <th>Team</th>
-                        {% if scoring_format == 'half_ppr' %}
+                        {% if scoring_format != 'standard' %}
                         <th class="num sortable" :class="{sorted: sortKey === 'dfs_pts'}" @click="sortBy('dfs_pts')">DFS proj. <span class="sort-cue" x-text="arrow('dfs_pts')"></span></th>
                         {% endif %}
                         <th class="num sortable" :class="{sorted: sortKey === 'betting_pts'}" @click="sortBy('betting_pts')">Sportsbook proj. <span class="sort-cue" x-text="arrow('betting_pts')"></span></th>
@@ -108,7 +108,7 @@
                             </td>
                             <td x-text="row.position"></td>
                             <td><span class="team-badge" :style="teamStyle(row.team)" x-text="row.team"></span></td>
-                            {% if scoring_format == 'half_ppr' %}
+                            {% if scoring_format != 'standard' %}
                             <td class="num" x-text="fmt1(row.dfs_pts)"></td>
                             {% endif %}
                             <td class="num" x-text="fmt1(row.betting_pts)"></td>
@@ -122,7 +122,7 @@
                     </template>
                     {% if rows %}
                     <tr x-show="filteredRows.length === 0">
-                        <td colspan="{{ 9 if scoring_format == 'half_ppr' else 8 }}" class="empty-state">
+                        <td colspan="{{ 9 if scoring_format != 'standard' else 8 }}" class="empty-state">
                             No players match your filters.
                         </td>
                     </tr>

@@ -584,7 +584,8 @@ a.summary-value:hover, .summary-value.hover-tag:hover { color: var(--accent); }
 .books-table th:not(:first-child), .books-table td:not(:first-child),
 .dfs-table th:not(:first-child), .dfs-table td:not(:first-child) { text-align: right; }
 
-.dfs-table { max-width: 340px; }
+.dfs-table { max-width: 440px; }
+.dfs-table tr.dfs-used td { font-weight: 600; }
 
 /* The per-book table has five columns but now sits inside a narrow market
    box, so it scrolls within its own container rather than spilling over the

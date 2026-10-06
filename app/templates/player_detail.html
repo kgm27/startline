@@ -121,22 +121,30 @@
     {% endif %}
 
     <h2 class="section-head" id="dfs-projections">DFS projections</h2>
-    {% if scoring_format != 'half_ppr' %}
-    <p class="note">DFS Projection isn't shown in {{ scoring_format_label }}: these numbers come pre-scored from
-        Underdog/PrizePicks in their own format, and there's no raw stat line behind them to re-score for a
-        different one. Switch to Half PPR to see it.</p>
+    {% if dfs_used_source is none %}
+    <p class="note">No DFS site scores in {{ scoring_format_label }}: Underdog scores half PPR and PrizePicks
+        full PPR, and each site's number is already scored its own way, with no raw stat line behind it to
+        re-score. Switch to Half PPR or Full PPR to see a DFS Projection.</p>
     {% elif dfs_rows %}
     <div class="table-card">
         <table class="dfs-table">
-            <thead><tr><th>Source</th><th>Projected Points</th></tr></thead>
+            <thead><tr><th>Source</th><th>Scoring</th><th>Projected Points</th></tr></thead>
             <tbody>
                 {% for row in dfs_rows %}
-                <tr><td>{{ dfs_source_labels.get(row.source, row.source) }}</td><td>{{ "%.2f"|format(row.projected_points) }}</td></tr>
+                <tr{% if row.source == dfs_used_source %} class="dfs-used"{% endif %}>
+                    <td>{{ dfs_source_labels.get(row.source, row.source) }}{% if row.source == dfs_used_source %} <span class="note">(used)</span>{% endif %}</td>
+                    <td>{{ dfs_source_formats.get(row.source, "—") }}</td>
+                    <td>{{ "%.2f"|format(row.projected_points) }}</td>
+                </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-    <p class="note" style="margin-top: 0.5rem;">Average of the sources above = {{ "%.2f"|format(dfs_pts) }}, feeding into the blend as the "DFS Projection" number.</p>
+    {% if dfs_pts is not none %}
+    <p class="note" style="margin-top: 0.5rem;">{{ dfs_source_labels.get(dfs_used_source, dfs_used_source) }} feeds the blend as the "DFS Projection" number ({{ "%.2f"|format(dfs_pts) }}) because it scores in {{ scoring_format_label }} natively. Other sites score in a different format (or don't say how), so they're shown for reference but never mixed in.</p>
+    {% else %}
+    <p class="note" style="margin-top: 0.5rem;">{{ dfs_source_labels.get(dfs_used_source, dfs_used_source) }}, the site that scores in {{ scoring_format_label }}, hasn't posted a number for {{ player.name }} this week, so the Blended score uses the sportsbook side alone. Other sites score in a different format (or don't say how), so none is substituted.</p>
+    {% endif %}
     {% else %}
     <p class="note">No DFS projections stored for this player/week.</p>
     {% endif %}

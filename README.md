@@ -23,12 +23,12 @@ to make one lineup call.
 
 ## How the blend works
 
-1. **DFS projections** (Underdog, PrizePicks) are averaged directly into expected fantasy points.
+1. **DFS projections** come from the site that scores in your format, unconverted: Underdog (half PPR) or
+   PrizePicks (full PPR). Standard has no DFS number.
 2. **Sportsbook lines** are converted from a market's implied probability at each quoted threshold into a
    full expected-value curve for that stat (e.g. rushing yards), then priced into fantasy points using the
    league's scoring rules.
-3. **Expert rankings** (FantasyPros consensus) provide a sanity-check perspective alongside the numbers.
-4. The DFS and sportsbook expected-points numbers are averaged into one **blended score**: the headline
+3. The DFS and sportsbook expected-points numbers are averaged into one **blended score**: the headline
    number the Dashboard sorts on by default.
 
 ## Stack
